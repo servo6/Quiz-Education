@@ -1,0 +1,162 @@
+/*
+  Thèmes de l'interface. Chaque thème ne définit que sa palette et ses polices ;
+  tout le reste (surfaces secondaires, états, ombres…) en est déduit dans app.css.
+  Jetons : bg, surface, line, text, muted, accent, on-accent, nav-bg, nav-text, stage-bg, stage-text,
+           good, bad, warn, polices, rayon, mode de couleur.
+*/
+
+/* Graphite — sombre, sobre, accent indigo (outil de travail moderne) */
+:root, [data-theme="graphite"] {
+  color-scheme: dark;
+  --bg: #0f1012; --surface: #16171a; --line: #26282d; --text: #e9eaed; --muted: #8b8f99;
+  --accent: #6670e0; --on-accent: #ffffff;
+  --nav-bg: #0b0c0e; --nav-text: #e9eaed;
+  --stage-bg: #0b0c0e; --stage-text: #f1f2f4;
+  --good: #3fb97f; --bad: #ef5b5b; --warn: #e5a93b;
+  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 12px; --radius-sm: 8px; --display-weight: 650; --display-tracking: -.02em;
+}
+
+/* Porcelaine — clair, bandeau marine, accent violet (paiement en ligne) */
+[data-theme="porcelain"] {
+  color-scheme: light;
+  --bg: #f6f9fc; --surface: #ffffff; --line: #e1e8ef; --text: #1a2340; --muted: #66738c;
+  --accent: #5b54f0; --on-accent: #ffffff;
+  --nav-bg: #0a2540; --nav-text: #ffffff;
+  --stage-bg: #0a2540; --stage-text: #ffffff;
+  --good: #108a5a; --bad: #d63b4b; --warn: #b7791f;
+  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 12px; --radius-sm: 8px; --display-weight: 650; --display-tracking: -.02em;
+}
+
+/* Papier — clair, chaleureux, titres à empattement (espace de notes) */
+[data-theme="paper"] {
+  color-scheme: light;
+  --bg: #fbfbfa; --surface: #ffffff; --line: #e8e6e1; --text: #2f2d29; --muted: #787570;
+  --accent: #2a78d6; --on-accent: #ffffff;
+  --nav-bg: #f6f5f2; --nav-text: #2f2d29;
+  --stage-bg: #f6f5f2; --stage-text: #2f2d29;
+  --good: #2f8f5b; --bad: #cf4a43; --warn: #b9801f;
+  --font-display: "Newsreader", Georgia, serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 8px; --radius-sm: 6px; --display-weight: 600; --display-tracking: -.01em;
+}
+
+/* Minuit — bleu nuit, accent bleu vif (plateforme de code) */
+[data-theme="midnight"] {
+  color-scheme: dark;
+  --bg: #0d1117; --surface: #151b23; --line: #2b323c; --text: #e6edf3; --muted: #8b95a3;
+  --accent: #388bfd; --on-accent: #ffffff;
+  --nav-bg: #010409; --nav-text: #e6edf3;
+  --stage-bg: #010409; --stage-text: #e6edf3;
+  --good: #3fb950; --bad: #f85149; --warn: #d29922;
+  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 6px; --display-weight: 650; --display-tracking: -.015em;
+}
+
+/* Monochrome — noir et blanc, rigueur typographique (hébergeur web) */
+[data-theme="mono"] {
+  color-scheme: light;
+  --bg: #fafafa; --surface: #ffffff; --line: #e7e7e7; --text: #111111; --muted: #6b6b6b;
+  --accent: #111111; --on-accent: #ffffff;
+  --nav-bg: #000000; --nav-text: #ffffff;
+  --stage-bg: #000000; --stage-text: #ffffff;
+  --good: #0a8f4e; --bad: #d92d3a; --warn: #a76b00;
+  --font-display: "Geist", "Inter", system-ui, sans-serif; --font-body: "Geist", "Inter", system-ui, sans-serif;
+  --radius: 8px; --radius-sm: 6px; --display-weight: 650; --display-tracking: -.035em;
+}
+
+/* Émeraude — sombre, accent vert vif (streaming musical) */
+[data-theme="emerald"] {
+  color-scheme: dark;
+  --bg: #0a0f0c; --surface: #121a15; --line: #223128; --text: #e8f1ea; --muted: #86a091;
+  --accent: #22c55e; --on-accent: #04170b;
+  --nav-bg: #060a07; --nav-text: #e8f1ea;
+  --stage-bg: #060a07; --stage-text: #eef6f0;
+  --good: #34d27b; --bad: #f0605d; --warn: #e3b341;
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif; --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
+  --radius: 14px; --radius-sm: 10px; --display-weight: 700; --display-tracking: -.02em;
+}
+
+/* Azur — clair, bleu institutionnel (cours en ligne) */
+[data-theme="azure"] {
+  color-scheme: light;
+  --bg: #f4f7fc; --surface: #ffffff; --line: #dbe3f0; --text: #11224a; --muted: #5a6a8c;
+  --accent: #0b5ed7; --on-accent: #ffffff;
+  --nav-bg: #ffffff; --nav-text: #11224a;
+  --stage-bg: #0c2253; --stage-text: #ffffff;
+  --good: #14804f; --bad: #d03a4a; --warn: #a96a0e;
+  --font-display: "DM Sans", system-ui, sans-serif; --font-body: "DM Sans", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 8px; --display-weight: 700; --display-tracking: -.02em;
+}
+
+/* Aubergine — barre latérale violet profond (messagerie d'équipe) */
+[data-theme="aubergine"] {
+  color-scheme: light;
+  --bg: #f7f6f8; --surface: #ffffff; --line: #e4e0e7; --text: #1f1b22; --muted: #67606e;
+  --accent: #6b2d73; --on-accent: #ffffff;
+  --nav-bg: #3c0f40; --nav-text: #ffffff;
+  --stage-bg: #3c0f40; --stage-text: #ffffff;
+  --good: #1f8a5b; --bad: #cc3545; --warn: #a8700f;
+  --font-display: "Lato", system-ui, sans-serif; --font-body: "Lato", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 6px; --display-weight: 900; --display-tracking: -.01em;
+}
+
+/* Nord — bleu glacier, contrastes doux */
+[data-theme="nord"] {
+  color-scheme: dark;
+  --bg: #2b303b; --surface: #353c4a; --line: #48516a; --text: #eceff4; --muted: #a4aec2;
+  --accent: #88c0d0; --on-accent: #1d2430;
+  --nav-bg: #222732; --nav-text: #eceff4;
+  --stage-bg: #222732; --stage-text: #eceff4;
+  --good: #a3be8c; --bad: #d97582; --warn: #ebcb8b;
+  --font-display: "IBM Plex Sans", system-ui, sans-serif; --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 6px; --display-weight: 600; --display-tracking: -.01em;
+}
+
+/* Sépia — papier ivoire, confort de lecture */
+[data-theme="sepia"] {
+  color-scheme: light;
+  --bg: #f3ecd9; --surface: #fbf7ea; --line: #ddd0b3; --text: #3a2f22; --muted: #7b6c55;
+  --accent: #9a4b24; --on-accent: #fffaf0;
+  --nav-bg: #e8dec2; --nav-text: #3a2f22;
+  --stage-bg: #e8dec2; --stage-text: #3a2f22;
+  --good: #3f7d4e; --bad: #b0382e; --warn: #9a6a14;
+  --font-display: "Lora", Georgia, serif; --font-body: "Source Serif 4", Georgia, serif;
+  --radius: 6px; --radius-sm: 4px; --display-weight: 700; --display-tracking: 0;
+}
+
+/* Royal — bleu marine et or (prestige) */
+[data-theme="royal"] {
+  color-scheme: dark;
+  --bg: #0a1128; --surface: #111a38; --line: #232f5c; --text: #eef1fb; --muted: #9aa6cb;
+  --accent: #d4af37; --on-accent: #1a1405;
+  --nav-bg: #060c1f; --nav-text: #eef1fb;
+  --stage-bg: #060c1f; --stage-text: #f4f6fd;
+  --good: #46c28a; --bad: #ee6a73; --warn: #e6bf55;
+  --font-display: "Playfair Display", Georgia, serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 6px; --display-weight: 700; --display-tracking: 0;
+}
+
+/* Rubis — blanc éclatant, accent corail-rouge (voyage et hébergement) */
+[data-theme="ruby"] {
+  color-scheme: light;
+  --bg: #f7f7f7; --surface: #ffffff; --line: #e8e8e8; --text: #222222; --muted: #6f6f6f;
+  --accent: #e0284f; --on-accent: #ffffff;
+  --nav-bg: #ffffff; --nav-text: #222222;
+  --stage-bg: #222222; --stage-text: #ffffff;
+  --good: #18865a; --bad: #c2303f; --warn: #a96a0e;
+  --font-display: "DM Sans", system-ui, sans-serif; --font-body: "DM Sans", system-ui, sans-serif;
+  --radius: 16px; --radius-sm: 10px; --display-weight: 700; --display-tracking: -.02em;
+}
+
+/* Contraste élevé — accessibilité maximale */
+[data-theme="contrast"] {
+  color-scheme: dark;
+  --bg: #000000; --surface: #0b0b0b; --line: #ffffff; --text: #ffffff; --muted: #d6d6d6;
+  --accent: #ffd60a; --on-accent: #000000;
+  --nav-bg: #000000; --nav-text: #ffffff;
+  --stage-bg: #000000; --stage-text: #ffffff;
+  --good: #3dff8a; --bad: #ff6b6b; --warn: #ffd60a;
+  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 6px; --radius-sm: 4px; --display-weight: 800; --display-tracking: -.01em;
+}

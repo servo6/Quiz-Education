@@ -1,0 +1,303 @@
+// Schéma de la plateforme de quiz.
+// Local : SQLite. En ligne : changer `provider` en "postgresql" et DATABASE_URL (voir README).
+// Les "enums" sont des String pour rester compatibles SQLite et PostgreSQL ; valeurs possibles en commentaire.
+// Les listes (choix, avatar, paramètres) sont stockées en JSON texte.
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client" // sans moteur Rust : fonctionne avec un adaptateur (SQLite ou PostgreSQL)
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────── Utilisateurs, matières, accès ─────────────
+
+model User {
+  id              String    @id @default(cuid())
+  username        String    @unique
+  passwordHash    String
+  role            String    @default("USER") // USER | SUBJECT_MANAGER | ADMIN
+  avatar          String    @default("{}") // JSON : { hair, face, outfit, glasses, hat, background, frame, colors }
+  activeSubjectId String? // matière actuellement sélectionnée
+  bannedAt        DateTime?
+  createdAt       DateTime  @default(now())
+
+  memberships Membership[]
+  players     GamePlayer[]
+  answers     Answer[]
+  xpEvents    XpEvent[]
+  badges      UserBadge[]
+  adminLogs   AdminLog[]
+  batches     ImportBatch[]
+  managedSubjects SubjectManager[]
+}
+
+model Subject {
+  id                 String   @id @default(cuid())
+  name               String   @unique
+  accessName         String   @unique // nom d'accès communiqué aux utilisateurs
+  accessPasswordHash String // mot de passe d'accès (haché)
+  settings           String   @default("{}") // JSON : surcharge des paramètres globaux
+  createdAt          DateTime @default(now())
+
+  chapters    Chapter[]
+  memberships Membership[]
+  games       Game[]
+  tiers       Tier[]
+  xpEvents    XpEvent[]
+  managers    SubjectManager[]
+}
+
+// Responsable de matière : un utilisateur (rôle SUBJECT_MANAGER) peut gérer une ou plusieurs matières.
+model SubjectManager {
+  id         String   @id @default(cuid())
+  userId     String
+  subjectId  String
+  assignedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectId])
+  @@index([subjectId])
+}
+
+// Un utilisateur dans une matière : porte l'XP (le niveau est calculé, jamais stocké).
+model Membership {
+  id        String    @id @default(cuid())
+  userId    String
+  subjectId String
+  xp        Int       @default(0) // total en cache, mis à jour dans la même transaction que XpEvent
+  joinedAt  DateTime  @default(now())
+  revokedAt DateTime? // accès révoqué par l'administrateur
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectId])
+  @@index([subjectId, xp]) // classement par matière
+}
+
+// ───────────── Banque de questions ─────────────
+
+model Chapter {
+  id        String    @id @default(cuid())
+  subjectId String
+  name      String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // corbeille
+
+  subject   Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  batches   ImportBatch[]
+  questions Question[]
+  rounds    Round[]
+
+  @@unique([subjectId, name])
+}
+
+// Un import = un lot. Permet d'annuler précisément un import.
+model ImportBatch {
+  id            String    @id @default(cuid())
+  chapterId     String
+  adminId       String
+  questionCount Int
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  chapter   Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  admin     User       @relation(fields: [adminId], references: [id])
+  questions Question[]
+}
+
+model Question {
+  id          String    @id @default(cuid())
+  chapterId   String
+  batchId     String
+  text        String
+  choices     String // JSON : ["A", "B", "C", "D"]
+  answerIndex Int // 0 = premier choix
+  explanation String?
+  hash        String // empreinte du texte normalisé, pour détecter les doublons
+  createdAt   DateTime  @default(now()) // sert à "supprimer à partir d'une date et heure"
+  deletedAt   DateTime? // corbeille
+
+  chapter Chapter        @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  batch   ImportBatch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  usages  GameQuestion[]
+
+  // Pas d'unicité en base : les doublons ne comptent que parmi les questions non supprimées (vérifié à l'import).
+  @@index([chapterId, hash])
+  @@index([chapterId, createdAt])
+  @@index([batchId])
+}
+
+// ───────────── Parties ─────────────
+
+model Game {
+  id         String    @id @default(cuid())
+  subjectId  String
+  mode       String // SOLO | FRIENDLY
+  status     String    @default("IN_PROGRESS") // WAITING | IN_PROGRESS | FINISHED | ABANDONED
+  config     String    @default("{}") // copie des paramètres au lancement (temps, nb de questions...)
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  subject   Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  players   GamePlayer[]
+  rounds    Round[]
+  questions GameQuestion[]
+  xpEvents  XpEvent[]
+
+  @@index([subjectId, createdAt])
+}
+
+model GamePlayer {
+  id           String  @id @default(cuid())
+  gameId       String
+  userId       String
+  correctCount Int     @default(0)
+  result       String? // WIN | DRAW | LOSS | FORFEIT (null en solo)
+  xpEarned     Int     @default(0)
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, userId])
+  @@index([userId, gameId])
+}
+
+// Solo : une seule manche. Duel : 4 manches, chapitre choisi avant chacune.
+model Round {
+  id        String @id @default(cuid())
+  gameId    String
+  number    Int
+  chapterId String
+
+  game      Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  chapter   Chapter        @relation(fields: [chapterId], references: [id])
+  questions GameQuestion[]
+
+  @@unique([gameId, number])
+}
+
+model GameQuestion {
+  id         String    @id @default(cuid())
+  gameId     String
+  roundId    String
+  position   Int
+  questionId String
+  servedAt   DateTime? // début du chronomètre côté serveur
+
+  game     Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round    Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+  answers  Answer[]
+
+  @@unique([roundId, position])
+}
+
+model Answer {
+  id             String   @id @default(cuid())
+  gameQuestionId String
+  userId         String
+  choiceIndex    Int? // null = temps écoulé
+  isCorrect      Boolean
+  timeMs         Int?
+  answeredAt     DateTime @default(now())
+
+  gameQuestion GameQuestion @relation(fields: [gameQuestionId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameQuestionId, userId])
+  @@index([userId, isCorrect])
+}
+
+// ───────────── XP, titres, badges, avatars ─────────────
+
+// Journal des gains d'XP (source de vérité de l'historique et des classements hebdomadaires).
+model XpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  subjectId String
+  source    String // CORRECT_ANSWER | FRIENDLY_WIN | FRIENDLY_DRAW
+  amount    Int
+  gameId    String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  game    Game?   @relation(fields: [gameId], references: [id], onDelete: SetNull)
+
+  @@index([subjectId, createdAt])
+  @@index([userId, subjectId, createdAt])
+}
+
+// subjectId null = titre par défaut ; renseigné = surcharge pour une matière.
+model Tier {
+  id        String  @id @default(cuid())
+  subjectId String?
+  name      String
+  minLevel  Int
+  color     String  @default("#9CA3AF")
+
+  subject Subject? @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId, minLevel])
+}
+
+model Badge {
+  id            String @id @default(cuid())
+  code          String @unique
+  name          String
+  description   String
+  conditionType String // CORRECT_TOTAL | PERFECT_SOLO | FRIENDLY_WINS | PERFECT_DUEL | STREAK_DAYS | SUBJECTS_PLAYED | FAST_STREAK
+  threshold     Int
+  icon          String @default("")
+
+  users UserBadge[]
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model AvatarItem {
+  id          String  @id @default(cuid())
+  category    String // hair | face | outfit | glasses | hat | background | frame
+  name        String
+  assetPath   String
+  unlockType  String  @default("FREE") // FREE | LEVEL | BADGE | TIER
+  unlockValue String? // niveau (ex. "20"), code de badge, ou nom de titre
+}
+
+// ───────────── Configuration et audit ─────────────
+
+model Setting {
+  key   String @id // ex. "timePerQuestionSec", "soloQuestions", "xpPerCorrect"...
+  value String // JSON
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String // auteur de l'action (administrateur ou responsable de matière)
+  subjectId String? // matière concernée (permet à un responsable de ne voir que son journal)
+  action    String // IMPORT_QUESTIONS | DELETE_CHAPTER | DELETE_BY_DATE | REVOKE_ACCESS ...
+  details   String   @default("{}")
+  createdAt DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([createdAt])
+  @@index([subjectId, createdAt])
+}

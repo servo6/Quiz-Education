@@ -1,0 +1,13 @@
+[
+  {
+    "question": "Quelle est la capitale de la France ?",
+    "choices": ["Lyon", "Paris", "Marseille", "Lille"],
+    "answer": 1,
+    "explanation": "Paris est la capitale de la France."
+  },
+  {
+    "question": "Combien font 7 × 8 ?",
+    "choices": ["54", "56", "58", "64"],
+    "answer": 1
+  }
+]
