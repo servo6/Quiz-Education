@@ -22,11 +22,11 @@ const safe = {
   set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* stockage indisponible */ } },
 };
 
-export const themeConfig = { theme: "graphite", allowUserChoice: true, ignorePersonal: false };
+export const themeConfig = { theme: "graphite", allowUserChoice: true, ignorePersonal: false, scopeTheme: null };
 export const personalTheme = () => { const v = safe.get("qp-theme-own"); return v && ids.has(v) ? v : null; };
 
 /** Thème réellement appliqué : le choix personnel s'il est autorisé, sinon celui de la plateforme. */
-export const effectiveTheme = () => (!themeConfig.ignorePersonal && themeConfig.allowUserChoice && personalTheme()) || themeConfig.theme;
+export const effectiveTheme = () => (!themeConfig.ignorePersonal && themeConfig.allowUserChoice && personalTheme()) || (ids.has(themeConfig.scopeTheme) ? themeConfig.scopeTheme : null) || themeConfig.theme;
 
 export function applyTheme(id = effectiveTheme()) {
   if (!ids.has(id)) id = "graphite";
@@ -45,6 +45,13 @@ export async function loadThemeConfig() {
   applyTheme();
 }
 export function setPersonalTheme(id) { safe.set("qp-theme-own", id); applyTheme(); }
+/** Apparence par défaut d'une organisation ou d'une matière (null = revenir au thème de la plateforme). */
+export async function setScopeTheme(scope, id, theme) {
+  const r = await put(`/api/theme/${scope}/${id}`, { theme });
+  themeConfig.scopeTheme = r.theme; applyTheme();
+  return r;
+}
+export async function platformThemeOf(scope, id) { return (await get(`/api/theme/${scope}/${id}`)).theme; }
 export async function setPlatformTheme(patch) {
   const r = await put("/api/admin/theme", patch);
   themeConfig.theme = r.theme; themeConfig.allowUserChoice = r.allowUserChoice;

@@ -186,8 +186,8 @@ export function registerStatsRoutes(app: FastifyInstance, { prisma, auth, timezo
     const m = await requireMembership(prisma, ctx.user.id, req.params.id);
     const view = await subjectView(prisma, req.params.id);
     const me = await prisma.user.findUniqueOrThrow({ where: { id: ctx.user.id }, select: { id: true, username: true, avatar: true } });
-    const rank = (await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" } }, xp: { gt: m.xp } } })) + 1;
-    const total = await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" } } } });
+    const rank = (await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: "USER" }, xp: { gt: m.xp } } })) + 1;
+    const total = await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: "USER" } } });
     const stats = await playerStats(prisma, ctx.user.id, req.params.id, timezone, Days.parse(req.query.days ?? 30));
     return { player: view.card(me, m.xp), rank, totalPlayers: total, ...stats };
   });
@@ -204,7 +204,7 @@ export function registerStatsRoutes(app: FastifyInstance, { prisma, auth, timezo
     const since = period === "all" ? null : startOfPeriod(period, new Date(), timezone);
 
     const members = await prisma.membership.findMany({
-      where: { subjectId, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" } } },
+      where: { subjectId, revokedAt: null, user: { bannedAt: null, role: "USER" } },
       include: { user: { select: { id: true, username: true, avatar: true } } },
     });
     const values = new Map<string, number>();
@@ -253,7 +253,7 @@ export function registerStatsRoutes(app: FastifyInstance, { prisma, auth, timezo
       where: { userId_subjectId: { userId: req.params.userId, subjectId: subject.id } },
       include: { user: { select: { id: true, username: true, avatar: true, role: true } } },
     });
-    if (!m || m.user.role === "ADMIN") throw new HttpError(404, "player_not_found", "Joueur introuvable dans cette matière");
+    if (!m || m.user.role !== "USER") throw new HttpError(404, "player_not_found", "Joueur introuvable dans cette matière");
     const view = await subjectView(prisma, subject.id);
     return { player: view.card(m.user, m.xp), ...(await playerStats(prisma, m.userId, subject.id, timezone, Days.parse(req.query.days ?? 30))) };
   });
@@ -270,7 +270,7 @@ export function registerStatsRoutes(app: FastifyInstance, { prisma, auth, timezo
 
     const [members, answers, players, xpEvents] = await Promise.all([
       prisma.membership.findMany({
-        where: { subjectId: subject.id, user: { role: { not: "ADMIN" } } },
+        where: { subjectId: subject.id, user: { role: "USER" } },
         include: { user: { select: { id: true, username: true, avatar: true, bannedAt: true } } },
       }),
       prisma.answer.findMany({

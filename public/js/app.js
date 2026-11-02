@@ -1,18 +1,20 @@
 import { h, mount, clear, get, post, icon, svg, sheet, toast, fail } from "./lib.js";
 import { S, loadMe, activeSubject, refreshSummary, loadCatalog, go, rerender } from "./state.js";
 import { authView, joinForm } from "./views/auth.js";
+import { resetView, verifyView, verifyBanner } from "./views/email.js";
 import { homeView } from "./views/home.js";
 import { soloPickView, soloPlayView, soloResultView } from "./views/solo.js";
 import { duelsView, duelNewView, duelDetailView, duelPlayView, duelResultView } from "./views/duels.js";
 import { rankingView } from "./views/ranking.js";
-import { profileView } from "./views/profile.js";
+import { profileView, staffProfileView } from "./views/profile.js";
 import { statsView } from "./views/stats.js";
 import { friendsView, chatView } from "./views/friends.js";
-import { adminView, canOpenAdmin, visibleGroups, adminSub, adminSubjects, chooseAdminSub, loadAdminSubjects } from "./views/admin.js";
+import { adminView, setStaffProfile, canOpenAdmin, visibleGroups, adminSub, adminSubjects, chooseAdminSub, loadAdminSubjects } from "./views/admin.js";
 import { applyTheme, loadThemeConfig, themeConfig } from "./theme.js";
 import { initLive } from "./live.js";
 
 const appEl = document.getElementById("app");
+setStaffProfile(() => staffProfileView(logout));
 
 // ───────── Routeur ─────────
 const routes = [];
@@ -47,11 +49,14 @@ async function render() {
   const my = ++token;
   cleanup?.(); cleanup = null;
   document.querySelectorAll(".sheet-back").forEach((e) => e.remove()); // une feuille ouverte ne survit pas à un changement de page
+  // Liens reçus par e-mail : accessibles connecté ou non
+  const link = /^#\/(reset|verify-email)\/([\w-]+)$/.exec(location.hash);
+  if (link) { shell = null; mount(appEl, link[1] === "reset" ? resetView(link[2]) : verifyView(link[2])); return; }
   if (!S.me) await loadMe();
   if (my !== token) return;
   if (!S.me) { shell = null; socket?.disconnect(); socket = null; mount(appEl, authView(boot)); return; }
-  const admin = S.me.user.role === "ADMIN";
-  themeConfig.ignorePersonal = admin; applyTheme();
+  const admin = S.me.user.role !== "USER"; // comptes de gestion : jamais des joueurs
+  themeConfig.ignorePersonal = admin; themeConfig.scopeTheme = S.me.themeDefault ?? null; applyTheme();
   if (!admin && !S.me.subjects.length) { shell = null; mount(appEl, joinScreen()); return; }
   if (!admin && !activeSubject()) {
     await post("/api/me/active-subject", { subjectId: S.me.subjects[0].id }).catch(() => {});
@@ -73,6 +78,7 @@ async function render() {
     const node = await found.r.view(params, ctx);
     if (my !== token) return;
     mount(host, node);
+    if (admin) { const b = verifyBanner(); if (b) host.prepend(b); }
     window.scrollTo(0, 0);
   } catch (e) {
     if (my !== token) return;
@@ -119,7 +125,7 @@ function paintTop() {
 }
 
 // ───────── Coque de l'administration : menu des panneaux, aucune navigation de joueur ─────────
-async function logout() { await post("/api/auth/logout").catch(() => {}); S.me = null; S.summary = null; socket?.disconnect(); socket = null; render(); }
+async function logout() { if (!confirm("Te déconnecter ?")) return; await post("/api/auth/logout").catch(() => {}); S.me = null; S.summary = null; socket?.disconnect(); socket = null; render(); }
 
 function ensureAdminShell(tab) {
   if (shell && shell.kind !== "admin") shell = null;
@@ -143,14 +149,14 @@ function ensureAdminShell(tab) {
 function paintAdminTop() {
   if (!shell || shell.kind !== "admin") return;
   const sub = adminSub();
-  const isAdminUser = S.me.user.role === "ADMIN";
+  const role = S.me.user.role;
   mount(shell.top,
-    h("div.wordmark", icon("logo"), h("span.wm-text", isAdminUser ? "Quiz · Administration" : "Quiz · Gestion")),
+    h("div.wordmark", icon("logo"), h("span.wm-text", role === "ADMIN" ? "Quiz · Administration" : role === "ORG_ADMIN" ? "Quiz · Organisation" : "Quiz · Gestion")),
     h("span.spacer"),
     adminSubjects().length > 0 ? h("button.subject-btn", { onclick: openAdminSubjects, "aria-label": "Changer de matière gérée" },
       h("span.name", sub?.name ?? "Matière"), icon("chevron")) : null,
-    isAdminUser ? h("button.btn.small", { onclick: logout, "aria-label": "Déconnexion" }, icon("logout"), h("span.btn-label", "Déconnexion"))
-      : h("a.btn.small", { href: "#/", "aria-label": "Retour au jeu" }, icon("back"), h("span.btn-label", "Retour au jeu")));
+    h("a.btn.small", { href: "#/admin/profil", "aria-label": "Mon profil", "aria-current": location.hash.startsWith("#/admin/profil") ? "page" : false }, icon("user"), h("span.btn-label", "Profil")),
+    h("button.btn.small", { onclick: logout, "aria-label": "Déconnexion" }, icon("logout"), h("span.btn-label", "Déconnexion")));
 }
 document.addEventListener("admin-subjects", () => paintAdminTop());
 function openAdminSubjects() {
@@ -187,16 +193,16 @@ function openSubjects() {
       }, h("div.grow", h("strong", s.name), h("div.muted.small", `Niveau ${s.level} · ${s.title?.name ?? ""}`)),
         s.id === S.me.user.activeSubjectId ? h("span.chip.good", "Active") : null))),
     h("h3", "Rejoindre une autre matière"),
+    h("p.muted.small", "Chaque matière a son propre nom d'accès et son mot de passe. Tu ne peux rejoindre que des matières de ton organisation."),
     joinForm(async () => { close(); await loadMe(); render(); })));
 }
 
 function joinScreen() {
-  const box = h("div.stack", joinForm(async () => { await loadMe(); render(); }));
   const out = h("button.btn.ghost.block", { onclick: logout }, "Se déconnecter");
   return h("div.auth", h("div.auth-box",
     h("div.brand", h("div.brand-mark", icon("logo")), h("h1", "Rejoindre une matière"),
       h("p", "Demande à ton responsable le nom d'accès et le mot de passe de la matière.")),
-    h("div.card", box), out));
+    h("div.card", h("div.stack", joinForm(async () => { await loadMe(); render(); }))), out));
 }
 
 // ───────── Temps réel (notifications) ─────────
@@ -216,7 +222,7 @@ function connectSocket(enabled = true) {
 
 async function boot() {
   await Promise.all([loadMe(), loadThemeConfig()]);
-  if (S.me && S.me.user.role !== "ADMIN") { connectSocket(); refreshSummary(); refreshSocial(); loadCatalog().catch(() => {}); }
+  if (S.me && S.me.user.role === "USER") { connectSocket(); refreshSummary(); refreshSocial(); loadCatalog().catch(() => {}); }
   render();
 }
 window.addEventListener("hashchange", render);

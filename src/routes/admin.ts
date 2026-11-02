@@ -20,8 +20,8 @@ export function registerAdminRoutes(app: FastifyInstance, { prisma, auth }: Deps
   // ── Supprimer définitivement une matière et tout ce qui s'y rattache (administrateur)
   app.delete<{ Params: { id: string } }>("/api/subjects/:id", async (req) => {
     const ctx = await auth(req);
-    assertCan(ctx.actor, "subject:delete");
     const subject = await loadSubject(prisma, req.params.id);
+    assertCan(ctx.actor, "subject:delete", subject.id);
     const { confirmName } = DeleteBody.parse(req.body ?? {});
     if (confirmName !== subject.name) {
       throw new HttpError(422, "confirmation_mismatch", "Pour confirmer, saisis exactement le nom de la matière", { expected: "name" });
@@ -51,16 +51,11 @@ export function registerAdminRoutes(app: FastifyInstance, { prisma, auth }: Deps
         await tx.importBatch.deleteMany({ where: { chapter: { subjectId } } });
         counts.chapters = (await tx.chapter.deleteMany({ where: { subjectId } })).count;
         await tx.tier.deleteMany({ where: { subjectId } });
-        const managers = await tx.subjectManager.findMany({ where: { subjectId }, select: { userId: true } });
         await tx.subjectManager.deleteMany({ where: { subjectId } });
         counts.members = (await tx.membership.deleteMany({ where: { subjectId } })).count;
         await tx.user.updateMany({ where: { activeSubjectId: subjectId }, data: { activeSubjectId: null } });
-        // Un responsable qui n'a plus aucune matière redevient simple utilisateur.
-        for (const { userId } of managers) {
-          if ((await tx.subjectManager.count({ where: { userId } })) === 0) {
-            await tx.user.updateMany({ where: { id: userId, role: "SUBJECT_MANAGER" }, data: { role: "USER" } });
-          }
-        }
+        // Un responsable sans matière reste un compte de gestion (jamais un joueur).
+        await tx.setting.deleteMany({ where: { key: `ui.theme:subject:${subjectId}` } });
         await tx.subject.delete({ where: { id: subjectId } });
         await logAction(tx, ctx.user.id, subjectId, "DELETE_SUBJECT", { name: subject.name, ...counts });
         return counts;
@@ -82,6 +77,8 @@ export function registerAdminRoutes(app: FastifyInstance, { prisma, auth }: Deps
       where.subjectId = q.subjectId;
     } else if (can(ctx.actor, "logs:viewAll")) {
       /* tout le journal */
+    } else if (ctx.actor.role === "ORG_ADMIN") {
+      where.subjectId = { in: [...(ctx.actor.orgSubjectIds ?? [])] };
     } else if (ctx.actor.role === "SUBJECT_MANAGER") {
       where.subjectId = { in: [...ctx.actor.managedSubjectIds] };
     } else {

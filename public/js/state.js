@@ -8,6 +8,7 @@ export async function loadMe() {
 }
 export const activeSubject = () => S.me?.subjects.find((s) => s.id === S.me.user.activeSubjectId) ?? null;
 export const isAdminUser = () => S.me?.user.role === "ADMIN";
+export const isStaff = () => !!S.me && S.me.user.role !== "USER";
 export async function loadCatalog() {
   if (!S.catalog) S.catalog = (await get("/api/avatar/items")).items;
   return S.catalog;

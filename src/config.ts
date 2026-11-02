@@ -17,6 +17,13 @@ const EnvSchema = z.object({
     .string()
     .optional()
     .refine((v) => v === undefined || !v.startsWith("change-moi"), "ADMIN_PASSWORD contient encore la valeur d'exemple"),
+  /** Envoi d'e-mails : "console" (affiche les liens dans le terminal), "brevo" ou "resend". */
+  MAIL_PROVIDER: z.enum(["console", "brevo", "resend"]).default("console"),
+  MAIL_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().email().optional(),
+  MAIL_FROM_NAME: z.string().default("Quiz"),
+  /** Adresse publique du site, utilisée dans les liens des e-mails (ex. https://quiz-education.onrender.com). */
+  APP_URL: z.string().url().optional(),
   REGISTRATION_OPEN: z
     .enum(["true", "false"])
     .default("true")

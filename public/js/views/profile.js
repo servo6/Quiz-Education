@@ -1,6 +1,7 @@
 import { h, get, post, put, fail, toast, sheet, avatarEl, pct } from "../lib.js";
 import { S, activeSubject, loadCatalog, loadMe, rerender } from "../state.js";
 import { personalThemeSection } from "./appearance.js";
+import { emailSection } from "./email.js";
 
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
 const SKINS = ["#f8d9bd", "#f2c9a0", "#d9a273", "#b07a4f", "#8a5a38", "#5e3b24"];
@@ -38,13 +39,14 @@ export async function profileView() {
         h("span.ico", b.icon || "🏅"), h("strong", b.name),
         h("span.muted.small", b.earned ? b.description : `${Math.min(b.current ?? 0, b.threshold ?? 0)} / ${b.threshold ?? "?"}`))))),
     personalThemeSection(),
+    emailSection(),
     h("section.stack.tight", h("h2", "Compte"),
       h("div.row.wrap",
         h("button.btn", { onclick: passwordSheet }, "Changer le mot de passe"),
-        h("button.btn.ghost", { onclick: async () => { await post("/api/auth/logout").catch(() => {}); S.me = null; S.summary = null; rerender(); } }, "Se déconnecter"))));
+        h("button.btn.ghost", { onclick: async () => { if (!confirm("Te déconnecter ?")) return; await post("/api/auth/logout").catch(() => {}); S.me = null; S.summary = null; rerender(); } }, "Se déconnecter"))));
 }
 
-function passwordSheet() {
+export function passwordSheet() {
   const cur = h("input.input", { type: "password", autocomplete: "current-password", required: true, id: "cp" });
   const nw = h("input.input", { type: "password", autocomplete: "new-password", required: true, minlength: 8, id: "np" });
   sheet("Changer le mot de passe", (close) => h("form.stack", {
@@ -89,4 +91,23 @@ async function editAvatar(_cat, done) {
         try { await put("/api/me/avatar", draft); await loadMe(); S.catalog = null; toast("Avatar enregistré", "good"); close(); done(); } catch (e) { fail(e); }
       } }, "Enregistrer"));
   });
+}
+
+const ROLE_LABEL = { ADMIN: "Super administrateur", ORG_ADMIN: "Administrateur d'organisation", SUBJECT_MANAGER: "Responsable de matière" };
+/** Profil d'un compte de gestion (administrateur, administrateur d'organisation, responsable). */
+export async function staffProfileView(logout) {
+  const me = S.me;
+  const orgs = me.organizations ?? [];
+  return h("div.stack",
+    h("div.admin-head", h("h1", "Mon profil")),
+    h("section.card.stack",
+      h("div.row", h("span.initial", { style: "width:48px;height:48px;font-size:1.3rem" }, me.user.username.slice(0, 1).toUpperCase()),
+        h("div", h("strong", me.user.username), h("div.muted", ROLE_LABEL[me.user.role] ?? ""))),
+      me.user.role !== "ADMIN" && orgs.length ? h("div.muted.small", `Organisation${orgs.length > 1 ? "s" : ""} : ${orgs.map((o) => o.name).join(", ")}`) : null,
+      me.user.role === "SUBJECT_MANAGER" && me.subjects.length ? h("div.muted.small", `Matière${me.subjects.length > 1 ? "s" : ""} gérée${me.subjects.length > 1 ? "s" : ""} : ${me.subjects.map((s) => s.name).join(", ")}`) : null),
+    emailSection(),
+    h("section.stack.tight", h("h2", "Compte"),
+      h("div.row.wrap",
+        h("button.btn", { onclick: passwordSheet }, "Changer le mot de passe"),
+        h("button.btn.ghost", { onclick: logout }, "Se déconnecter"))));
 }

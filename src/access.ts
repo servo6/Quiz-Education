@@ -16,7 +16,7 @@ export async function loadChapter(prisma: PrismaClient, id: string): Promise<Cha
 
 /** Peut consulter le contenu d'une matière : administrateur, responsable de la matière, ou membre actif. */
 export async function canReadSubject(prisma: PrismaClient, ctx: AuthContext, subjectId: string): Promise<boolean> {
-  if (ctx.actor.role === "ADMIN" || ctx.actor.managedSubjectIds.has(subjectId)) return true;
+  if (ctx.actor.role === "ADMIN" || ctx.actor.managedSubjectIds.has(subjectId) || ctx.actor.orgSubjectIds?.has(subjectId)) return true;
   const membership = await prisma.membership.findUnique({
     where: { userId_subjectId: { userId: ctx.user.id, subjectId } },
   });
@@ -35,7 +35,7 @@ export async function requireMembership(prisma: PrismaClient, userId: string, su
     ? await prisma.membership.findUnique({ where: { userId_subjectId: { userId, subjectId } } })
     : await prisma.membership.findUnique({ where: { userId_subjectId: { userId, subjectId } }, include: { user: { select: { role: true } } } });
   const role = knownRole ?? (m as { user?: { role: string } } | null)?.user?.role;
-  if (m && role === "ADMIN") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
+  if (m && role !== "USER") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
   if (!m || m.revokedAt) throw new HttpError(403, "not_a_member", "Tu n'as pas accès à cette matière");
   return m;
 }

@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 import { addDaysKey, startOfPeriod } from "../src/time.ts";
 import { answerStreaks, dayStreaks } from "../src/routes/stats.ts";
 import { purgeExpiredMessages } from "../src/routes/social.ts";
@@ -15,7 +15,7 @@ before(async () => {
   env = await createTestEnv();
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
-  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Stats", accessName: "stats", accessPassword: "acces-123" })).json().subject.id;
+  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Stats" })).json().subject.id;
   chapterId = (await call(env, admin, "POST", `/api/subjects/${subjectId}/import/commit`, { raw: sampleBlock(20, "S"), newChapterName: "S" })).json().chapterId;
   await call(env, admin, "PATCH", `/api/subjects/${subjectId}`, { settings: { soloQuestions: 5, soloGamesPerDay: 0, timePerQuestionSec: 0 } });
 });
@@ -23,7 +23,7 @@ after(() => env.close());
 
 async function player() {
   const u = await register(env, `st-${++n}`);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: "stats", accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, "stats");
   return u;
 }
 const right = async (gq: string) => (await env.prisma.gameQuestion.findUniqueOrThrow({ where: { id: gq }, include: { question: true } })).question.answerIndex;

@@ -8,7 +8,6 @@ import { assertCan } from "../permissions.ts";
 import { startOfDay } from "../time.ts";
 
 const PasswordBody = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(8, "8 caractères minimum").max(128) });
-const RoleBody = z.object({ role: z.enum(["USER", "ADMIN"]) });
 
 export function registerAccountRoutes(app: FastifyInstance, { prisma, auth, limit, timezone }: Deps): void {
   // ── Changer son propre mot de passe
@@ -22,26 +21,6 @@ export function registerAccountRoutes(app: FastifyInstance, { prisma, auth, limi
     await prisma.user.update({ where: { id: ctx.user.id }, data: { passwordHash: await hashPassword(newPassword) } });
     await logAction(prisma, ctx.user.id, null, "CHANGE_OWN_PASSWORD");
     return { ok: true };
-  });
-
-  // ── Nommer / retirer un administrateur (le rôle "responsable" découle des matières assignées)
-  app.put<{ Params: { id: string } }>("/api/users/:id/role", async (req) => {
-    const ctx = await auth(req);
-    assertCan(ctx.actor, "users:setRole");
-    const { role } = RoleBody.parse(req.body);
-    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
-    if (!target) throw new HttpError(404, "user_not_found", "Utilisateur introuvable");
-    if (target.id === ctx.user.id) throw new HttpError(422, "self_role", "Tu ne peux pas modifier ton propre rôle");
-    if (target.bannedAt) throw new HttpError(409, "user_banned", "Ce compte est suspendu");
-
-    let next: string = role;
-    if (role === "USER") {
-      next = (await prisma.subjectManager.count({ where: { userId: target.id } })) > 0 ? "SUBJECT_MANAGER" : "USER";
-    }
-    if (next === target.role) return { role: target.role };
-    await prisma.user.update({ where: { id: target.id }, data: { role: next } });
-    await logAction(prisma, ctx.user.id, null, "SET_ROLE", { userId: target.id, username: target.username, from: target.role, to: next });
-    return { role: next };
   });
 
   // ── Vue d'ensemble de la plateforme (administrateur)

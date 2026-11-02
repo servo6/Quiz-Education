@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { DuelEngine, type Hub, type Timings } from "../src/duel/engine.ts";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 
 // ───────────── Outils ─────────────
 
@@ -60,7 +60,7 @@ before(async () => {
   await seedAdmin(env);
   const admin = await login(env, ADMIN.username, ADMIN.password);
   const mk = async (name: string, access: string) =>
-    (await call(env, admin, "POST", "/api/subjects", { name, accessName: access, accessPassword: "acces-123" })).json().subject.id as string;
+    (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   subjectId = await mk("Chimie", "chimie");
   otherSubjectId = await mk("Histoire", "histoire");
   const imp = async (sid: string, name: string, n: number) =>
@@ -143,7 +143,7 @@ test("défi : refusé si adversaire hors ligne, d'une autre matière, soi-même,
   await rejectsWith(s.engine.createChallenge(a.id, subjectId, b.id), "not_same_subject");
 
   // Matière sans aucune question
-  const empty = await env.prisma.subject.create({ data: { name: "Vide", accessName: "vide", accessPasswordHash: "x" } });
+  const empty = await env.prisma.subject.create({ data: { name: "Vide", accessName: "vide", accessPasswordHash: "x", organizationId: (await env.prisma.organization.findFirstOrThrow()).id } });
   const [d, e] = [await player(empty.id), await player(empty.id)];
   online(s, d, e);
   await rejectsWith(s.engine.createChallenge(d.id, empty.id, e.id), "no_questions");
@@ -542,7 +542,7 @@ test("liste des adversaires : même matière seulement, avec présence et niveau
   const [me, a, b, other] = [await player(), await player(), await player(), await player(otherSubjectId)];
   await env.prisma.membership.updateMany({ where: { userId: a.id }, data: { xp: 150 } });
   const { cookie } = await register(env, "liste-duel");
-  await call(env, cookie, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" });
+  await joinSubject(env, cookie, "chimie");
 
   assert.equal((await call(env, null, "GET", `/api/subjects/${subjectId}/players`)).statusCode, 401);
   const res = await call(env, cookie, "GET", `/api/subjects/${subjectId}/players?q=${a.username}`);

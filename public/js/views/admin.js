@@ -1,20 +1,27 @@
 import { h, mount, get, post, put, api, fail, toast, errorMessage, icon } from "../lib.js";
 import { statsPanel, chatPanel } from "./adminStats.js";
 import { S, go, rerender } from "../state.js";
-import { editQuestion, managersSection, comptes, titres, badges, avatars, download } from "./admin2.js";
-import { appearancePanel } from "./appearance.js";
+import { editQuestion, comptes, titres, badges, avatars, download } from "./admin2.js";
+import { appearancePanel, scopedAppearancePanel } from "./appearance.js";
+import { overviewPanel } from "./overview.js";
+import { organisations, matieres as matieresView, joueurs, sure } from "./orgs.js";
 
-/** Panneaux d'administration : [clé, libellé, icône]. Le dernier élément d'un groupe réservé à l'administrateur le marque. */
+/** Panneaux d'administration : [clé, libellé, icône]. `scoped` : panneaux de la matière choisie ; `roles` : qui les voit. */
 export const ADMIN_GROUPS = [
-  { name: "Matière", items: [["stats", "Statistiques", "chart"], ["questions", "Questions", "list"], ["corbeille", "Corbeille", "trash"], ["membres", "Membres", "users"], ["reglages", "Réglages", "sliders"], ["journal", "Journal", "journal"]] },
-  { name: "Plateforme", adminOnly: true, items: [["matieres", "Matières", "book"], ["comptes", "Comptes", "shield"], ["globaux", "Réglages globaux", "sliders"], ["messagerie", "Messagerie", "chat"], ["journalg", "Journal global", "journal"], ["titres", "Titres", "layers"], ["badges", "Badges", "award"], ["avatars", "Avatars", "image"], ["apparence", "Apparence", "palette"]] },
+  { name: "Matière", scoped: true, items: [["stats", "Statistiques", "chart"], ["questions", "Questions", "list"], ["corbeille", "Corbeille", "trash"], ["membres", "Membres", "users"], ["reglages", "Réglages", "sliders"], ["apparence", "Apparence", "palette", ["SUBJECT_MANAGER"]], ["journal", "Journal", "journal"]] },
+  { name: "Organisation", roles: ["ADMIN", "ORG_ADMIN"], items: [["apercu", "Vue d'ensemble", "chart"], ["organisations", "Organisations", "layers"], ["matieres", "Matières", "book"], ["joueurs", "Joueurs", "users"], ["globaux", "Réglages de l'organisation", "sliders", ["ORG_ADMIN"]], ["apparence", "Apparence", "palette", ["ORG_ADMIN"]], ["journalg", "Journal général", "journal"]] },
+  { name: "Plateforme", roles: ["ADMIN"], items: [["comptes", "Comptes", "shield"], ["globaux", "Réglages globaux", "sliders", ["ADMIN"]], ["messagerie", "Messagerie", "chat"], ["titres", "Titres", "layers"], ["badges", "Badges", "award"], ["avatars", "Avatars", "image"], ["apparence", "Apparence", "palette", ["ADMIN"]]] },
 ];
 const patch = (u, b) => api("PATCH", u, b);
 const del = (u, b) => api("DELETE", u, b);
 const fmt = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
 const isAdmin = () => S.me.user.role === "ADMIN";
-export const canOpenAdmin = () => isAdmin() || (S.me.managedSubjectIds?.length ?? 0) > 0;
-export const visibleGroups = () => ADMIN_GROUPS.filter((g) => !g.adminOnly || isAdmin());
+let staffProfile = null;
+export const setStaffProfile = (fn) => { staffProfile = fn; };
+export const canOpenAdmin = () => S.me.user.role !== "USER";
+export const visibleGroups = () => ADMIN_GROUPS.filter((g) => !g.roles || g.roles.includes(S.me.user.role)).map((g) => ({
+  ...g, items: g.items.filter((it) => !it[3] || it[3].includes(S.me.user.role)).map((it) => (it[0] === "organisations" && S.me.user.role === "ORG_ADMIN" ? ["organisations", "Mon organisation", it[2]] : it)),
+}));
 
 // ───────── Matière gérée (l'administrateur n'est membre d'aucune matière) ─────────
 let subjectList = null;
@@ -39,14 +46,15 @@ export async function adminView({ tab }) {
   await loadAdminSubjects();
   const sub = adminSub();
   const groups = visibleGroups();
-  const flat = groups.flatMap((g) => g.items.map((it) => ({ it, scoped: !g.adminOnly })));
-  if (!tab || !flat.some((x) => x.it[0] === tab)) { go(`/admin/${sub || !isAdmin() ? "stats" : "matieres"}`); return h("div"); }
+  const flat = groups.flatMap((g) => g.items.map((it) => ({ it, scoped: !!g.scoped })));
+  if (tab === "profil") return staffProfile();
+  if (!tab || !flat.some((x) => x.it[0] === tab)) { go(`/admin/${S.me.user.role === "SUBJECT_MANAGER" ? "stats" : S.me.user.role === "ORG_ADMIN" || S.me.user.role === "ADMIN" ? "apercu" : sub ? "stats" : "matieres"}`); return h("div"); }
   const { it, scoped } = flat.find((x) => x.it[0] === tab);
   const body = h("div.stack", h("div.center", h("div.spinner")));
-  const views = { stats: statsPanel, messagerie: () => chatPanel(), globaux: () => reglages(null), journalg: () => journal(null), questions, corbeille, membres, reglages, journal, matieres, comptes, titres, badges, avatars, apparence: () => appearancePanel() };
+  const views = { apercu: () => overviewPanel(), stats: statsPanel, messagerie: () => chatPanel(), globaux: () => (S.me.user.role === "ADMIN" ? reglages(null) : orgReglages()), journalg: () => journal(null, true), questions, corbeille, membres, reglages, journal, matieres: () => matieresView(loadAdminSubjects, chooseAdminSub), organisations, joueurs, comptes, titres, badges, avatars, apparence: (sub) => (S.me.user.role === "ADMIN" ? appearancePanel() : S.me.user.role === "ORG_ADMIN" ? orgAppearance() : subjectAppearance(sub)) };
   if (scoped && !sub) {
     body.replaceChildren(h("div.empty", icon("book"), h("p", "Aucune matière pour le moment."),
-      isAdmin() ? h("a.btn.primary", { href: "#/admin/matieres" }, "Créer une matière") : null));
+      S.me.user.role !== "SUBJECT_MANAGER" ? h("a.btn.primary", { href: "#/admin/matieres" }, "Créer une matière") : null));
   } else {
     views[tab](sub).then((n) => body.replaceChildren(n)).catch((e) => body.replaceChildren(h("p.error-box", errorMessage(e))));
   }
@@ -126,6 +134,7 @@ async function questions(sub) {
           h("div.row.between", h("strong", q.question), h("div.row",
             h("button.btn.small", { onclick: async () => { const { chapters } = await get(`/api/subjects/${sub.id}/chapters`); editQuestion(q, chapters, c.id, () => { refresh(); openChapter(c); }); } }, "Modifier"),
             h("button.btn.small.danger", { onclick: async () => {
+              if (!sure("Supprimer cette question ? Tu pourras la restaurer depuis la corbeille.")) return;
               try { await del(`/api/questions/${q.id}`); toast("Question supprimée", "good"); refresh(); openChapter(c); } catch (e) { fail(e); } } }, "Supprimer"))),
           h("ul", q.choices.map((ch, i) => h("li", { class: i === q.answer ? "right" : "" }, ch, i === q.answer ? " ✓" : ""))),
           q.stats.answered ? h("div.muted.small", `Réussite ${q.stats.accuracy} % sur ${q.stats.answered} réponses`) : null))) : h("p.muted.small", "Aucune question."))));
@@ -212,26 +221,24 @@ async function corbeille(sub) {
 async function membres(sub) {
   const q = h("input.input", { type: "search", placeholder: "Chercher un membre", "aria-label": "Chercher un membre" });
   const list = h("div.list");
-  const mg = isAdmin() ? await managersSection(sub) : null;
   async function load() {
     const r = await get(`/api/subjects/${sub.id}/members?q=${encodeURIComponent(q.value)}`);
     list.replaceChildren(...(r.members.length ? r.members.map((m) => h("div.item", { style: "flex-wrap:wrap" },
       h("span.initial", m.username.slice(0, 1).toUpperCase()),
       h("div.grow", h("strong", m.username), h("div.muted.small", `Niv. ${m.level} · ${m.xp} XP · inscrit le ${fmt(m.joinedAt)}`)),
       m.banned ? h("span.chip.bad", "suspendu") : null,
-      mg?.ids.has(m.userId) ? h("span.chip.amber", "responsable") : null,
       h("div.row.wrap",
-        mg && m.role !== "ADMIN" && !m.revokedAt ? h("button.btn.small", { onclick: () => mg.toggle(m, rerender) }, mg.ids.has(m.userId) ? "Retirer responsable" : "Nommer responsable") : null,
         m.revokedAt ? h("button.btn.small", { onclick: () => run("restore", m) }, "Rétablir")
-          : m.role === "ADMIN" ? h("span.chip", "admin") : h("button.btn.small.danger", { onclick: () => run("revoke", m) }, "Révoquer")))) : [h("p.muted", "Aucun membre.")]));
+          : h("button.btn.small.danger", { onclick: () => run("revoke", m) }, "Révoquer")))) : [h("p.muted", "Aucun membre.")]));
   }
   async function run(what, m) {
     if (what === "revoke" && !confirm(`Révoquer l'accès de ${m.username} à cette matière ? Son XP est conservé.`)) return;
+    if (what === "restore" && !confirm(`Rétablir l'accès de ${m.username} à cette matière ?`)) return;
     try { await post(`/api/subjects/${sub.id}/members/${m.userId}/${what}`, {}); load(); } catch (e) { fail(e); }
   }
   let t; q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 250); });
   await load();
-  return h("div.stack", mg ? h("p.muted.small", "Un responsable gère les questions, les chapitres, les réglages et les membres de cette matière.") : null, q, list);
+  return h("div.stack", q, list);
 }
 
 // ───────── Réglages ─────────
@@ -243,9 +250,10 @@ const LABELS = {
   xpPerCorrect: ["XP par bonne réponse", "number"], friendlyWinBonus: ["Bonus de victoire (XP)", "number"], friendlyDrawBonus: ["XP pour chaque joueur en cas d'égalité", "number"],
   levelBase: ["Courbe de niveaux : base", "number"], levelExponent: ["Courbe de niveaux : exposant", "number"],
 };
-async function reglages(sub) {
+async function reglages(sub, org) {
   const G = !sub;
-  const r = G ? { ...(await get("/api/settings")), subject: {} } : await get(`/api/subjects/${sub.id}`);
+  const base = org ? `/api/organizations/${org.id}/settings` : "/api/settings";
+  const r = G ? { ...(await get(base)), subject: {} } : await get(`/api/subjects/${sub.id}`);
   const inputs = {};
   const fields = Object.entries(LABELS).map(([k, [label, type]]) => {
     const el = type === "bool" ? h("input", { type: "checkbox", id: "s-" + k, checked: !!r.settings[k] }) : h("input.input", { id: "s-" + k, type: "number", step: k === "levelExponent" ? "0.1" : "1", value: r.settings[k] });
@@ -253,25 +261,41 @@ async function reglages(sub) {
     return h("div.field", type === "bool" ? h("label.row", el, " " + label) : [h("label", { for: "s-" + k }, label, r.overrides[k] !== undefined ? h("span.chip.amber", { style: "margin-left:8px" }, "personnalisé") : null), el]);
   });
   const read = () => Object.fromEntries(Object.entries(LABELS).map(([k, [, type]]) => [k, type === "bool" ? inputs[k].checked : Number(inputs[k].value)]));
-  const an = h("input.input", { id: "acc-n", value: r.subject.accessName, autocapitalize: "none" });
-  const ap = h("input.input", { id: "acc-p", type: "password", placeholder: "Laisser vide pour ne pas changer", autocomplete: "off" });
   return h("div.stack",
-    h("form.card.stack", { onsubmit: async (e) => { e.preventDefault(); try { const now = read(); const changed = Object.fromEntries(Object.entries(now).filter(([k, v]) => v !== r.settings[k])); if (!Object.keys(changed).length) return toast("Aucun changement"); if (G) await put("/api/settings", changed); else await patch(`/api/subjects/${sub.id}`, { settings: changed }); toast("Réglages enregistrés", "good"); rerender(); } catch (ex) { fail(ex); } } },
-      h("h2", G ? "Réglages globaux" : "Réglages de la matière"), G ? h("p.muted.small", "Valables pour toutes les matières, sauf celles qui ont leurs propres réglages.") : null, fields,
+    h("form.card.stack", { onsubmit: async (e) => { e.preventDefault(); try { const now = read(); const changed = Object.fromEntries(Object.entries(now).filter(([k, v]) => v !== r.settings[k])); if (!Object.keys(changed).length) return toast("Aucun changement"); if (G) await put(base, changed); else await patch(`/api/subjects/${sub.id}`, { settings: changed }); toast("Réglages enregistrés", "good"); rerender(); } catch (ex) { fail(ex); } } },
+      h("h2", G ? (org ? `Réglages de « ${org.name} »` : "Réglages globaux") : "Réglages de la matière"), G ? h("p.muted.small", org ? "Valables pour toutes les matières de cette organisation, sauf celles qui ont leurs propres réglages." : "Valables pour toutes les matières, sauf celles qui ont leurs propres réglages.") : null, fields,
       h("div.row.wrap", h("button.btn.primary", { type: "submit" }, "Enregistrer"),
         h("button.btn.ghost", { type: "button", onclick: async () => { if (!confirm("Revenir aux réglages par défaut pour cette matière ?")) return;
-          try { const nul = Object.fromEntries(Object.keys(LABELS).map((k) => [k, null])); if (G) await put("/api/settings", nul); else await patch(`/api/subjects/${sub.id}`, { settings: nul }); toast("Réglages par défaut rétablis", "good"); rerender(); } catch (ex) { fail(ex); } } }, "Valeurs par défaut"))),
-    G ? null : h("form.card.stack", { onsubmit: async (e) => { e.preventDefault(); const b = { accessName: an.value.trim() }; if (ap.value) b.accessPassword = ap.value;
-      try { await patch(`/api/subjects/${sub.id}`, b); toast("Accès mis à jour", "good"); ap.value = ""; } catch (ex) { fail(ex); } } },
-      h("h2", "Accès des joueurs"), h("p.muted.small", "Les joueurs rejoignent la matière avec ce nom et ce mot de passe. Changer le mot de passe n'exclut personne déjà inscrit."),
-      h("div.field", h("label", { for: "acc-n" }, "Nom d'accès"), an), h("div.field", h("label", { for: "acc-p" }, "Nouveau mot de passe d'accès"), ap),
-      h("button.btn", { type: "submit" }, "Mettre à jour")));
+          try { const nul = Object.fromEntries(Object.keys(LABELS).map((k) => [k, null])); if (G) await put(base, nul); else await patch(`/api/subjects/${sub.id}`, { settings: nul }); toast("Réglages par défaut rétablis", "good"); rerender(); } catch (ex) { fail(ex); } } }, "Valeurs par défaut"))),
+    G ? null : accessForm(sub, r.subject.accessName));
+}
+/** Nom d'accès et mot de passe que les joueurs saisissent pour rejoindre la matière. */
+function accessForm(sub, current) {
+  const an = h("input.input", { id: "acc-n", value: current ?? "", autocapitalize: "none" });
+  const ap = h("input.input", { id: "acc-p", type: "password", placeholder: "Laisser vide pour ne pas changer", autocomplete: "off" });
+  return h("form.card.stack", { onsubmit: async (e) => { e.preventDefault();
+    if (ap.value && !sure("Changer le mot de passe d'accès ? Les joueurs déjà inscrits ne sont pas exclus.")) return;
+    const b = { accessName: an.value.trim() }; if (ap.value) b.accessPassword = ap.value;
+    try { await patch(`/api/subjects/${sub.id}`, b); toast("Accès mis à jour", "good"); ap.value = ""; } catch (ex) { fail(ex); } } },
+    h("h2", "Accès des joueurs"), h("p.muted.small", "Les joueurs rejoignent la matière avec ce nom et ce mot de passe. Changer le mot de passe n'exclut personne déjà inscrit."),
+    h("div.field", h("label", { for: "acc-n" }, "Nom d'accès"), an), h("div.field", h("label", { for: "acc-p" }, "Nouveau mot de passe d'accès"), ap),
+    h("button.btn", { type: "submit" }, "Mettre à jour"));
 }
 
 // ───────── Journal ─────────
-const ACTIONS = { CREATE_SUBJECT: "Matière créée", DELETE_SUBJECT: "Matière supprimée", IMPORT_QUESTIONS: "Import de questions", CREATE_CHAPTER: "Chapitre créé", LOCK_CHAPTER: "Chapitre bloqué", UNLOCK_CHAPTER: "Chapitre débloqué", CHAPTER_COLOR: "Couleur de chapitre", RENAME_CHAPTER: "Chapitre renommé", DELETE_CHAPTER: "Chapitre supprimé", DELETE_BATCH: "Import annulé", DELETE_BY_DATE: "Suppression par date", ASSIGN_MANAGER: "Responsable nommé", REMOVE_MANAGER: "Responsable retiré", EDIT_QUESTION: "Question modifiée", UPDATE_QUESTION: "Question modifiée", REVOKE_MEMBER: "Accès révoqué", RESTORE_MEMBER: "Accès rétabli", UPDATE_SUBJECT: "Matière modifiée", SET_TIERS: "Titres modifiés", RESET_TIERS: "Titres réinitialisés", UPDATE_GLOBAL_SETTINGS: "Réglages globaux modifiés", BAN_USER: "Compte suspendu", UNBAN_USER: "Compte rétabli", RESET_PASSWORD: "Mot de passe réinitialisé", SET_ROLE: "Rôle modifié", CREATE_BADGE: "Badge créé", UPDATE_BADGE: "Badge modifié", DELETE_BADGE: "Badge supprimé", CREATE_AVATAR_ITEM: "Objet d'avatar créé", UPDATE_AVATAR_ITEM: "Objet d'avatar modifié", DELETE_AVATAR_ITEM: "Objet d'avatar supprimé", EXPORT_BACKUP: "Sauvegarde téléchargée" };
-async function journal(sub) {
-  const filter = h("select.input", { "aria-label": "Type d'action" }, h("option", { value: "" }, "Toutes les actions"), Object.entries(ACTIONS).map(([k, l]) => h("option", { value: k }, l)));
+const ACTIONS = { UPDATE_THEME: "Apparence modifiée", UPDATE_ORG_SETTINGS: "Réglages d'organisation modifiés", CREATE_ORGANIZATION: "Organisation créée", UPDATE_ORGANIZATION: "Organisation modifiée", DELETE_ORGANIZATION: "Organisation supprimée", CREATE_ORG_ADMIN: "Administrateur d'organisation créé", ASSIGN_ORG_ADMIN: "Administrateur rattaché", REMOVE_ORG_ADMIN: "Administrateur retiré", CREATE_MANAGER: "Responsable créé", REVOKE_ACCESS: "Accès révoqué", RESTORE_ACCESS: "Accès rétabli", CREATE_SUBJECT: "Matière créée", DELETE_SUBJECT: "Matière supprimée", IMPORT_QUESTIONS: "Import de questions", CREATE_CHAPTER: "Chapitre créé", LOCK_CHAPTER: "Chapitre bloqué", UNLOCK_CHAPTER: "Chapitre débloqué", CHAPTER_COLOR: "Couleur de chapitre", RENAME_CHAPTER: "Chapitre renommé", DELETE_CHAPTER: "Chapitre supprimé", DELETE_BATCH: "Import annulé", DELETE_BY_DATE: "Suppression par date", ASSIGN_MANAGER: "Responsable nommé", REMOVE_MANAGER: "Responsable retiré", EDIT_QUESTION: "Question modifiée", UPDATE_QUESTION: "Question modifiée", REVOKE_MEMBER: "Accès révoqué", RESTORE_MEMBER: "Accès rétabli", UPDATE_SUBJECT: "Matière modifiée", SET_TIERS: "Titres modifiés", RESET_TIERS: "Titres réinitialisés", UPDATE_GLOBAL_SETTINGS: "Réglages globaux modifiés", BAN_USER: "Compte suspendu", UNBAN_USER: "Compte rétabli", RESET_PASSWORD: "Mot de passe réinitialisé", EXTEND_VERIFICATION: "Délai de vérification prolongé", SET_ROLE: "Rôle modifié", CREATE_BADGE: "Badge créé", UPDATE_BADGE: "Badge modifié", DELETE_BADGE: "Badge supprimé", CREATE_AVATAR_ITEM: "Objet d'avatar créé", UPDATE_AVATAR_ITEM: "Objet d'avatar modifié", DELETE_AVATAR_ITEM: "Objet d'avatar supprimé", EXPORT_BACKUP: "Sauvegarde téléchargée" };
+const SUBJECT_ACTIONS = ["IMPORT_QUESTIONS", "CREATE_CHAPTER", "LOCK_CHAPTER", "UNLOCK_CHAPTER", "CHAPTER_COLOR", "RENAME_CHAPTER", "DELETE_CHAPTER", "DELETE_BATCH", "DELETE_BY_DATE", "EDIT_QUESTION", "UPDATE_QUESTION", "REVOKE_ACCESS", "RESTORE_ACCESS", "REVOKE_MEMBER", "RESTORE_MEMBER", "UPDATE_SUBJECT", "SET_TIERS", "RESET_TIERS", "UPDATE_THEME"];
+const MANAGER_ACTIONS = ["CREATE_MANAGER", "ASSIGN_MANAGER", "REMOVE_MANAGER"];
+const ORG_LEVEL_ACTIONS = ["CREATE_SUBJECT", "DELETE_SUBJECT", "UPDATE_ORG_SETTINGS", "UPDATE_ORGANIZATION", "BAN_USER", "UNBAN_USER", "RESET_PASSWORD"];
+/** Types d'action proposés dans le filtre du journal, selon le rôle et l'étendue du journal. */
+function journalActions(general) {
+  const role = S.me.user.role;
+  if (role === "ADMIN") return general ? Object.keys(ACTIONS) : [...MANAGER_ACTIONS, ...SUBJECT_ACTIONS];
+  if (role === "ORG_ADMIN") return [...(general ? ORG_LEVEL_ACTIONS : []), ...MANAGER_ACTIONS, ...SUBJECT_ACTIONS];
+  return SUBJECT_ACTIONS;
+}
+async function journal(sub, general = false) {
+  const filter = h("select.input", { "aria-label": "Type d'action" }, h("option", { value: "" }, "Toutes les actions"), journalActions(general).filter((k) => ACTIONS[k]).map((k) => [k, ACTIONS[k]]).map(([k, l]) => h("option", { value: k }, l)));
   const list = h("div.list");
   const more = h("button.btn.ghost.block", { hidden: true }, "Afficher plus");
   let cursor = null;
@@ -294,24 +318,25 @@ async function journal(sub) {
   return h("div.stack", filter, list, more);
 }
 
-// ───────── Matières (administrateur) ─────────
-async function matieres() {
-  const r = await loadAdminSubjects(true).then((subjects) => ({ subjects }));
-  const name = h("input.input", { id: "m-n", required: true, maxlength: 80 });
-  const an = h("input.input", { id: "m-a", required: true, autocapitalize: "none" });
-  const ap = h("input.input", { id: "m-p", type: "password", required: true, minlength: 8, autocomplete: "off" });
-  return h("div.stack",
-    r.subjects.length ? h("section.stack.tight", h("h2", "Toutes les matières"), h("div.list", r.subjects.map((s) => h("div.item",
-      h("div.grow", h("strong", s.name), h("div.muted.small", `accès « ${s.accessName} » · ${s.memberCount} joueur${s.memberCount > 1 ? "s" : ""}`)),
-      h("button.btn.small", { onclick: () => { chooseAdminSub(s.id); go("/admin/questions"); } }, "Gérer"),
-      h("button.btn.small.danger", { onclick: async () => {
-        const c = prompt(`Suppression DÉFINITIVE de « ${s.name} » avec ses questions, parties et statistiques.\nPour confirmer, tape exactement le nom de la matière :`);
-        if (c == null) return;
-        try { await del(`/api/subjects/${s.id}`, { confirmName: c }); toast("Matière supprimée", "good"); await loadAdminSubjects(true); rerender(); } catch (e) { fail(e); } } }, "Supprimer"))))) : h("p.muted", "Aucune matière : crée la première ci-dessous."),
-    h("form.card.stack", { onsubmit: async (e) => { e.preventDefault();
-      try { const x = await post("/api/subjects", { name: name.value.trim(), accessName: an.value.trim(), accessPassword: ap.value }); await loadAdminSubjects(true); chooseAdminSub(x.subject.id); toast("Matière créée", "good"); go("/admin/questions"); } catch (ex) { fail(ex); } } },
-      h("h2", "Nouvelle matière"),
-      h("div.field", h("label", { for: "m-n" }, "Nom"), name), h("div.field", h("label", { for: "m-a" }, "Nom d'accès (donné aux joueurs)"), an), h("div.field", h("label", { for: "m-p" }, "Mot de passe d'accès (8 caractères minimum)"), ap),
-      h("button.btn.primary", { type: "submit" }, "Créer la matière")));
+const mineOrgs = async () => (await get("/api/organizations")).organizations;
+async function orgAppearance() {
+  return scopedAppearancePanel("organization", await mineOrgs(), {
+    title: "Apparence de l'organisation",
+    help: "S'applique à ton interface et devient le thème par défaut des joueurs de l'organisation. Un joueur qui a choisi son propre thème le garde.",
+  });
 }
-async function apparence() { return appearancePanel(); }
+async function subjectAppearance(sub) {
+  return scopedAppearancePanel("subject", [sub], {
+    title: `Apparence de « ${sub.name} »`,
+    help: "S'applique à ton interface et devient le thème par défaut des joueurs de cette matière. Un joueur qui a choisi son propre thème le garde.",
+  });
+}
+async function orgReglages() {
+  const orgs = await mineOrgs();
+  const sel = h("select.input", { "aria-label": "Organisation" }, orgs.map((o) => h("option", { value: o.id }, o.name)));
+  const box = h("div.stack");
+  const paint = async () => box.replaceChildren(await reglages(null, orgs.find((o) => o.id === sel.value)));
+  sel.onchange = () => paint().catch(fail);
+  await paint();
+  return h("div.stack", orgs.length > 1 ? sel : "", box);
+}

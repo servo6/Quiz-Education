@@ -22,13 +22,13 @@ export function registerDuelRoutes(app: FastifyInstance, { prisma, auth }: Deps,
     const q = z.string().trim().toLowerCase().max(40).catch("").parse(req.query.q ?? "");
 
     const subject = await prisma.subject.findUniqueOrThrow({ where: { id: req.params.id } });
-    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
     const members = await prisma.membership.findMany({
       where: {
         subjectId: subject.id,
         revokedAt: null,
         userId: { not: ctx.user.id },
-        user: { bannedAt: null, role: { not: "ADMIN" }, ...(q ? { username: { contains: q } } : {}) },
+        user: { bannedAt: null, role: "USER", ...(q ? { username: { contains: q } } : {}) },
       },
       include: { user: { select: { id: true, username: true, avatar: true } } },
       orderBy: { user: { username: "asc" } },

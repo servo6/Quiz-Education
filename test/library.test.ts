@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, assignManager } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -15,7 +15,7 @@ before(async () => {
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
   const mk = async (name: string, accessName: string) =>
-    (await call(env, admin, "POST", "/api/subjects", { name, accessName, accessPassword: "acces-123" })).json().subject.id as string;
+    (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   subjectId = await mk("Chimie", "chimie");
   otherId = await mk("Histoire", "histoire");
   const imp = async (sid: string, name: string, n: number) =>
@@ -28,7 +28,7 @@ after(() => env.close());
 const list = async (cookie: string, id: string, query = "") => (await call(env, cookie, "GET", `/api/chapters/${id}/questions${query}`)).json();
 async function manager(sid = subjectId) {
   const u = await register(env, `lib-${++counter}`);
-  await call(env, admin, "PUT", `/api/subjects/${sid}/managers/${u.id}`);
+  await assignManager(env, sid, u.id);
   return { ...u, cookie: await login(env, `lib-${counter}`, "password-123") };
 }
 

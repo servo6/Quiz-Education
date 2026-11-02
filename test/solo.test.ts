@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -16,7 +16,7 @@ before(async () => {
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
   const mk = async (name: string, accessName: string) =>
-    (await call(env, admin, "POST", "/api/subjects", { name, accessName, accessPassword: "acces-123" })).json().subject.id as string;
+    (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   subjectId = await mk("Chimie", "chimie");
   otherSubjectId = await mk("Histoire", "histoire");
   const imp = async (sid: string, name: string, n: number) =>
@@ -32,7 +32,7 @@ const setSettings = (settings: Record<string, unknown>) => call(env, admin, "PAT
 
 async function player(name: string) {
   const u = await register(env, name);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, "chimie");
   return u;
 }
 
@@ -319,7 +319,7 @@ test("les paramètres modifiés pendant une partie ne la changent pas", async ()
 
 test("l'XP est propre à chaque matière", async () => {
   const p = await player("solo-matieres");
-  await call(env, p.cookie, "POST", "/api/subjects/join", { accessName: "histoire", accessPassword: "acces-123" });
+  await joinSubject(env, p.cookie, "histoire");
   await setSettings({ soloQuestions: 3, soloGamesPerDay: 0 });
   const s = (await start(p.cookie, smallChapter)).json();
   await call(env, p.cookie, "POST", `/api/solo/${s.game.id}/answer`, { gameQuestionId: s.question.gameQuestionId, choiceIndex: await correctIndexOf(s.question.gameQuestionId) });

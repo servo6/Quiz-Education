@@ -1,11 +1,16 @@
 import { h, post, fail, errorMessage, icon } from "../lib.js";
 import { loadMe } from "../state.js";
+import { forgotSheet } from "./email.js";
 
 export function authView(onLogged) {
   let mode = "login";
   const box = h("div.card");
   const err = h("div.error-box", { hidden: true, role: "alert" });
-  const user = h("input.input", { id: "u", autocomplete: "username", required: true, minlength: 3, maxlength: 32, autocapitalize: "none", spellcheck: "false" });
+  const user = h("input.input", { id: "u", autocomplete: "username", required: true, minlength: 3, maxlength: 120, autocapitalize: "none", spellcheck: "false" });
+  const email = h("input.input", { id: "em", type: "email", autocomplete: "email", maxlength: 120, autocapitalize: "none", placeholder: "facultatif" });
+  const userLabel = h("label", { for: "u" }, "Pseudo");
+  const emailField = h("div.field", h("label", { for: "em" }, "Adresse e-mail (facultatif)"), email);
+  const forgot = h("button.btn.ghost.small", { type: "button", onclick: () => forgotSheet(user.value.trim()) }, "Mot de passe oublié ?");
   const pass = h("input.input", { id: "p", type: "password", required: true, minlength: 8 });
   const submit = h("button.btn.primary.block", { type: "submit" }, "Se connecter");
   const hint = h("p.muted.small");
@@ -18,7 +23,11 @@ export function authView(onLogged) {
     tabReg.setAttribute("aria-selected", m === "register");
     submit.textContent = m === "login" ? "Se connecter" : "Créer mon compte";
     pass.autocomplete = m === "login" ? "current-password" : "new-password";
-    hint.textContent = m === "register" ? "Au moins 8 caractères pour le mot de passe." : "";
+    hint.textContent = m === "register" ? "Au moins 8 caractères pour le mot de passe. L'adresse e-mail te permettra de récupérer ton compte ; tu pourras la vérifier plus tard dans Profil." : "";
+    userLabel.textContent = m === "login" ? "Pseudo ou adresse e-mail" : "Pseudo";
+    user.maxLength = m === "login" ? 120 : 30;
+    emailField.hidden = m !== "register";
+    forgot.hidden = m !== "login";
     err.hidden = true;
   }
   const form = h("form.stack", {
@@ -26,7 +35,7 @@ export function authView(onLogged) {
       e.preventDefault();
       submit.disabled = true; err.hidden = true;
       try {
-        await post(`/api/auth/${mode}`, { username: user.value.trim(), password: pass.value });
+        await post(`/api/auth/${mode}`, mode === "register" ? { username: user.value.trim(), email: email.value.trim() || undefined, password: pass.value } : { username: user.value.trim(), password: pass.value });
         await loadMe();
         await onLogged();
       } catch (ex) {
@@ -34,9 +43,10 @@ export function authView(onLogged) {
       } finally { submit.disabled = false; }
     },
   },
-    h("div.field", h("label", { for: "u" }, "Nom d'utilisateur"), user),
+    h("div.field", userLabel, user),
+    emailField,
     h("div.field", h("label", { for: "p" }, "Mot de passe"), pass),
-    err, submit, hint);
+    err, submit, forgot, hint);
   box.append(h("div.tabs", { role: "tablist" }, tabLogin, tabReg), form);
   set("login");
 
@@ -48,7 +58,7 @@ export function authView(onLogged) {
     box));
 }
 
-/** Formulaire « rejoindre une matière » (accès + mot de passe). */
+/** Rejoindre une matière avec son nom d'accès et son mot de passe (l'organisation en découle). */
 export function joinForm(onJoined) {
   const name = h("input.input", { id: "an", required: true, autocapitalize: "none", spellcheck: "false" });
   const pw = h("input.input", { id: "ap", type: "password", required: true, autocomplete: "off" });

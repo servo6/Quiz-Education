@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { assertAccountInReach } from "../accountScope.ts";
 import { loadSubject } from "../access.ts";
 import { logAction } from "../audit.ts";
 import type { Deps } from "../auth.ts";
@@ -21,12 +22,12 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
     assertCan(ctx.actor, "members:view", subject.id);
     const q = z.string().trim().toLowerCase().max(40).catch("").parse(req.query.q ?? "");
     const status = z.enum(["active", "revoked", "all"]).catch("all").parse(req.query.status ?? "all");
-    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
     const rows = await prisma.membership.findMany({
       where: {
         subjectId: subject.id,
         ...(status === "active" ? { revokedAt: null } : status === "revoked" ? { revokedAt: { not: null } } : {}),
-        user: { role: { not: "ADMIN" }, ...(q ? { username: { contains: q } } : {}) },
+        user: { role: "USER", ...(q ? { username: { contains: q } } : {}) },
       },
       orderBy: [{ revokedAt: { sort: "asc", nulls: "first" } }, { xp: "desc" }],
       take: 500,
@@ -87,6 +88,10 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
   });
 
   // ── Suspendre / rétablir un compte (administrateur)
+  function requireAccountManager(ctx: { actor: { role: string } }): void {
+    if (ctx.actor.role !== "ADMIN" && ctx.actor.role !== "ORG_ADMIN") throw new HttpError(403, "forbidden", "Action non autorisée");
+  }
+
   async function targetUser(id: string) {
     const u = await prisma.user.findUnique({ where: { id } });
     if (!u) throw new HttpError(404, "user_not_found", "Utilisateur introuvable");
@@ -95,11 +100,10 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
 
   app.post<{ Params: { id: string } }>("/api/users/:id/ban", async (req) => {
     const ctx = await auth(req);
-    assertCan(ctx.actor, "users:ban");
+    requireAccountManager(ctx);
     const { reason } = ReasonBody.parse(req.body ?? {});
     const u = await targetUser(req.params.id);
-    if (u.id === ctx.user.id) throw new HttpError(422, "self_ban", "Tu ne peux pas suspendre ton propre compte");
-    if (u.role === "ADMIN") throw new HttpError(422, "ban_admin", "Un administrateur ne peut pas être suspendu");
+    await assertAccountInReach(prisma, ctx, u);
     if (u.bannedAt) throw new HttpError(409, "already_banned", "Ce compte est déjà suspendu");
     await prisma.user.update({ where: { id: u.id }, data: { bannedAt: new Date() } });
     await logAction(prisma, ctx.user.id, null, "BAN_USER", { userId: u.id, username: u.username, reason: reason ?? null });
@@ -110,8 +114,9 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
 
   app.post<{ Params: { id: string } }>("/api/users/:id/unban", async (req) => {
     const ctx = await auth(req);
-    assertCan(ctx.actor, "users:ban");
+    requireAccountManager(ctx);
     const u = await targetUser(req.params.id);
+    await assertAccountInReach(prisma, ctx, u);
     if (!u.bannedAt) throw new HttpError(409, "not_banned", "Ce compte n'est pas suspendu");
     await prisma.user.update({ where: { id: u.id }, data: { bannedAt: null } });
     await logAction(prisma, ctx.user.id, null, "UNBAN_USER", { userId: u.id, username: u.username });
@@ -121,9 +126,10 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
   // ── Réinitialiser le mot de passe d'un utilisateur (pas d'e-mail : c'est l'administrateur qui s'en charge)
   app.post<{ Params: { id: string } }>("/api/users/:id/reset-password", async (req) => {
     const ctx = await auth(req);
-    assertCan(ctx.actor, "users:resetPassword");
+    requireAccountManager(ctx);
     const { newPassword } = ResetBody.parse(req.body);
     const u = await targetUser(req.params.id);
+    await assertAccountInReach(prisma, ctx, u);
     await prisma.user.update({ where: { id: u.id }, data: { passwordHash: await hashPassword(newPassword) } });
     await logAction(prisma, ctx.user.id, null, "RESET_PASSWORD", { userId: u.id, username: u.username });
     return { ok: true };

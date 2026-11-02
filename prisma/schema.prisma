@@ -19,12 +19,17 @@ model User {
   id              String    @id @default(cuid())
   username        String    @unique
   passwordHash    String
-  role            String    @default("USER") // USER | SUBJECT_MANAGER | ADMIN
+  role            String    @default("USER") // USER | SUBJECT_MANAGER | ORG_ADMIN | ADMIN (= super administrateur)
+  createdById     String? // compte qui a créé celui-ci (administrateurs et responsables sont créés, jamais promus)
   avatar          String    @default("{}") // JSON : { hair, face, outfit, glasses, hat, background, frame, colors }
   activeSubjectId String? // matière actuellement sélectionnée
   bannedAt        DateTime?
   createdAt       DateTime  @default(now())
+  email           String?   @unique // facultative ; en minuscules
+  emailVerifiedAt DateTime?
+  verifyDeadline  DateTime? // administrateurs d'organisation et responsables : compte suspendu si l'e-mail n'est pas vérifié à cette date
 
+  emailTokens EmailToken[]
   memberships Membership[]
   players     GamePlayer[]
   answers     Answer[]
@@ -33,6 +38,8 @@ model User {
   adminLogs   AdminLog[]
   batches     ImportBatch[]
   managedSubjects SubjectManager[]
+  adminOrgs       OrgAdmin[]
+  orgMemberships  OrgMember[]
   friendshipsSent     Friendship[] @relation("FriendRequester")
   friendshipsReceived Friendship[] @relation("FriendAddressee")
   messages            Message[]
@@ -40,9 +47,10 @@ model User {
 
 model Subject {
   id                 String   @id @default(cuid())
-  name               String   @unique
-  accessName         String   @unique // nom d'accès communiqué aux utilisateurs
-  accessPasswordHash String // mot de passe d'accès (haché)
+  organizationId     String
+  name               String
+  accessName         String   @unique // interne : plus utilisé pour rejoindre (on rejoint l'organisation)
+  accessPasswordHash String // interne (haché)
   settings           String   @default("{}") // JSON : surcharge des paramètres globaux
   createdAt          DateTime @default(now())
 
@@ -53,6 +61,49 @@ model Subject {
   xpEvents    XpEvent[]
   managers    SubjectManager[]
   friendships Friendship[]
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, name])
+}
+
+/// Organisation (ex. une université) : contient des matières, totalement indépendante des autres organisations.
+model Organization {
+  id                 String   @id @default(cuid())
+  name               String   @unique
+  accessName         String   @unique // les joueurs rejoignent l'organisation avec ce nom…
+  accessPasswordHash String // …et ce mot de passe (haché)
+  createdAt          DateTime @default(now())
+
+  subjects Subject[]
+  admins   OrgAdmin[]
+  members  OrgMember[]
+}
+
+/// Administrateur d'organisation : compte créé par le super administrateur, jamais un joueur promu.
+model OrgAdmin {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+/// Joueur inscrit dans une organisation (il y choisit ensuite ses matières).
+model OrgMember {
+  id             String    @id @default(cuid())
+  userId         String
+  organizationId String
+  joinedAt       DateTime  @default(now())
+  revokedAt      DateTime?
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
 }
 
 // Responsable de matière : un utilisateur (rôle SUBJECT_MANAGER) peut gérer une ou plusieurs matières.
@@ -359,4 +410,20 @@ model Message {
 
   @@index([friendshipId, createdAt])
   @@index([createdAt])
+}
+
+/// Jeton à usage unique envoyé par e-mail (vérification d'adresse ou réinitialisation du mot de passe). Seul son hachage est stocké.
+model EmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String // VERIFY | RESET
+  tokenHash String    @unique
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
 }

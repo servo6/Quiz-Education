@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { io as ioc, type Socket } from "socket.io-client";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 
 let env: TestEnv;
 let url: string;
@@ -13,7 +13,7 @@ before(async () => {
   env = await createTestEnv({ duelTimings: { revealMs: 30, graceMs: 50 } });
   await seedAdmin(env);
   const admin = await login(env, ADMIN.username, ADMIN.password);
-  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Chimie", accessName: "chimie", accessPassword: "acces-123" })).json().subject.id;
+  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Chimie" })).json().subject.id;
   chapterId = (await call(env, admin, "POST", `/api/subjects/${subjectId}/import/commit`, { raw: sampleBlock(10, "A"), newChapterName: "A" })).json().chapterId;
   await call(env, admin, "PATCH", `/api/subjects/${subjectId}`, { settings: { liveTimePerQuestionSec: 10, liveRoundsPerDuel: 1, liveQuestionsPerRound: 2 } });
   await env.app.listen({ port: 0, host: "127.0.0.1" });
@@ -27,7 +27,7 @@ after(async () => {
 
 async function member(name: string) {
   const u = await register(env, name);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, "chimie");
   return u;
 }
 

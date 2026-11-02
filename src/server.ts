@@ -1,5 +1,6 @@
 import { purgeExpiredMessages } from "./routes/social.ts";
 import { buildApp } from "./app.ts";
+import { createMailer } from "./mailer.ts";
 import { ensureAdmin } from "./bootstrap.ts";
 import { loadEnv } from "./config.ts";
 import { createPrisma } from "./db.ts";
@@ -31,11 +32,11 @@ if (env.ADMIN_USERNAME && env.ADMIN_PASSWORD) {
 }
 
 // Un administrateur n'est pas un joueur : on retire d'anciennes appartenances éventuelles.
-await prisma.membership.deleteMany({ where: { user: { role: "ADMIN" } } });
+await prisma.membership.deleteMany({ where: { user: { role: { not: "USER" } } } });
 // Et on clôt les duels non terminés où figurait un administrateur : ils ne pourraient plus être joués.
-await prisma.game.updateMany({ where: { status: "IN_PROGRESS", mode: { in: ["DUEL", "FRIENDLY"] }, players: { some: { user: { role: "ADMIN" } } } }, data: { status: "ABANDONED" } });
+await prisma.game.updateMany({ where: { status: "IN_PROGRESS", mode: { in: ["DUEL", "FRIENDLY"] }, players: { some: { user: { role: { not: "USER" } } } } }, data: { status: "ABANDONED" } });
 // Messagerie : suppression des messages expirés au démarrage, puis toutes les heures.
-await Promise.all([purgeExpiredMessages(prisma), prisma.questionServe.count({ take: 1 }), prisma.friendship.count({ take: 1 }), prisma.chapter.findFirst({ select: { locked: true } }), prisma.gamePlayer.findFirst({ select: { hiddenAt: true } })]).catch((e: unknown) => {
+await Promise.all([purgeExpiredMessages(prisma), prisma.questionServe.count({ take: 1 }), prisma.friendship.count({ take: 1 }), prisma.chapter.findFirst({ select: { locked: true } }), prisma.gamePlayer.findFirst({ select: { hiddenAt: true } }), prisma.organization.count({ take: 1 }), prisma.orgMember.count({ take: 1 })]).catch((e: unknown) => {
   const text = String((e as Error)?.message ?? e);
   if (/undefined \(reading/.test(text)) {
     console.error("\n⚠ Le client Prisma n'a pas été régénéré après la mise à jour.\n  Arrête le serveur, lance : npx prisma generate  puis : npm run dev\n");
@@ -60,6 +61,8 @@ const app = await buildApp({
   logger: true,
   cache: true,
   staticDir: "public",
+  appUrl: env.APP_URL,
+  mailer: createMailer({ provider: env.MAIL_PROVIDER, apiKey: env.MAIL_API_KEY, from: env.MAIL_FROM, fromName: env.MAIL_FROM_NAME }),
 });
 
 const orphans = await app.duels.recoverOrphans();

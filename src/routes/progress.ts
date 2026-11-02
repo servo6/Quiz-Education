@@ -44,7 +44,7 @@ const AvatarBody = z.object({
 export async function subjectView(prisma: PrismaClient, subjectId: string) {
   const subject = await prisma.subject.findUnique({ where: { id: subjectId } });
   if (!subject) throw new HttpError(404, "subject_not_found", "Matière introuvable");
-  const settings = await loadEffectiveSettings(prisma, subject.settings);
+  const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
   const { tiers } = await loadTiers(prisma, subjectId);
   const lc = { base: settings.levelBase, exponent: settings.levelExponent };
   const card = (user: { id: string; username: string; avatar: string }, xp: number) => {
@@ -107,7 +107,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
   // ───────────── Badges ─────────────
   app.get("/api/me/badges", async (req) => {
     const ctx = await auth(req);
-    if (ctx.actor.role === "ADMIN") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
+    if (ctx.actor.role !== "USER") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
     const { progress, newlyEarned } = await evaluateBadges(prisma, ctx.user.id, timezone);
     return { badges: progress, newlyEarned, earnedCount: progress.filter((b) => b.earned).length };
   });
@@ -161,7 +161,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
   });
   app.put("/api/me/avatar", async (req) => {
     const ctx = await auth(req);
-    if (ctx.actor.role === "ADMIN") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
+    if (ctx.actor.role !== "USER") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
     const body = AvatarBody.parse(req.body);
     const unlock = await unlockContext(prisma, ctx.user.id);
     const items: Partial<Record<AvatarCategory, string>> = {};
@@ -210,7 +210,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
     const mine = await requireMembership(prisma, ctx.user.id, req.params.id);
     const limit = z.coerce.number().int().min(1).max(100).catch(20).parse(req.query.limit ?? 20);
     const view = await subjectView(prisma, req.params.id);
-    const active = { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" as const } } };
+    const active = { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: "USER" as const } };
     const rows = await prisma.membership.findMany({
       where: active,
       orderBy: [{ xp: "desc" }, { joinedAt: "asc" }],
@@ -275,7 +275,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
     const ctx = await auth(req);
     const m = await requireMembership(prisma, ctx.user.id, req.params.id);
     const view = await subjectView(prisma, req.params.id);
-    const rank = (await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" as const } }, xp: { gt: m.xp } } })) + 1;
+    const rank = (await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: "USER" as const }, xp: { gt: m.xp } } })) + 1;
     const me = await prisma.user.findUniqueOrThrow({ where: { id: ctx.user.id }, select: { id: true, username: true, avatar: true } });
     return { player: view.card(me, m.xp), rank, ...(await statsFor(ctx.user.id, req.params.id)) };
   });
@@ -294,7 +294,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
       statsFor(target.userId, req.params.id),
       prisma.userBadge.findMany({ where: { userId: target.userId }, include: { badge: true }, orderBy: { earnedAt: "desc" } }),
     ]);
-    const rank = (await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" as const } }, xp: { gt: target.xp } } })) + 1;
+    const rank = (await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: "USER" as const }, xp: { gt: target.xp } } })) + 1;
 
     // Face-à-face : duels terminés entre les deux joueurs dans cette matière.
     const shared = await prisma.game.findMany({

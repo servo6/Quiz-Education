@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -11,14 +11,14 @@ before(async () => {
   env = await createTestEnv();
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
-  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Matiere", accessName: "matiere", accessPassword: "acces-123" })).json().subject.id;
+  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Matiere" })).json().subject.id;
   chapterId = (await call(env, admin, "POST", `/api/subjects/${subjectId}/import/commit`, { raw: sampleBlock(3, "A"), newChapterName: "A" })).json().chapterId;
 });
 after(() => env.close());
 
 async function player() {
   const u = await register(env, `mx-${++n}`);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: "matiere", accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, "matiere");
   return u;
 }
 

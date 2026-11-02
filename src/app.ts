@@ -22,12 +22,16 @@ import { registerAdminRoutes } from "./routes/admin.ts";
 import { registerLibraryRoutes } from "./routes/library.ts";
 import { registerMemberRoutes } from "./routes/members.ts";
 import { registerProgressRoutes } from "./routes/progress.ts";
+import { registerOrganizationRoutes } from "./routes/organizations.ts";
 import { registerSoloRoutes } from "./routes/solo.ts";
 import { registerHistoryRoutes } from "./routes/history.ts";
 import { registerSocialRoutes } from "./routes/social.ts";
 import { registerStatsRoutes } from "./routes/stats.ts";
+import { registerOverviewRoutes } from "./routes/overview.ts";
 import { registerSubjectRoutes } from "./routes/subjects.ts";
-import { registerThemeRoutes } from "./routes/theme.ts";
+import { registerThemeRoutes, registerScopedThemeRoutes } from "./routes/theme.ts";
+import { createMailer, type Mailer } from "./mailer.ts";
+import { registerEmailRoutes } from "./routes/email.ts";
 import { DEFAULT_TIMEZONE } from "./time.ts";
 
 export interface AppOptions {
@@ -49,6 +53,10 @@ export interface AppOptions {
   duelTimings?: Partial<Timings>;
   /** Dossier de l'interface web (index.html, assets…) servi à la racine ; ignoré s'il n'existe pas. */
   staticDir?: string;
+  /** Envoi d'e-mails (vérification, mot de passe oublié). Défaut : affichage dans le terminal. */
+  mailer?: Mailer;
+  /** Adresse publique du site pour les liens des e-mails. */
+  appUrl?: string;
 }
 
 declare module "fastify" {
@@ -93,13 +101,18 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     prisma: opts.prisma,
     auth: makeAuth(opts.prisma, opts.cache === true),
     registrationOpen: opts.registrationOpen ?? true,
+    mailer: opts.mailer ?? createMailer({ provider: "console" }),
+    appUrl: opts.appUrl,
     timezone: opts.timezone ?? DEFAULT_TIMEZONE,
     limit: (max) => ({ rateLimit: useLimit ? { max, timeWindow: "1 minute" } : false }),
   };
 
   registerAuthRoutes(app, deps, opts.secureCookies ?? false);
+  registerEmailRoutes(app, deps);
+  registerOrganizationRoutes(app, deps);
   registerSubjectRoutes(app, deps);
   registerThemeRoutes(app, deps);
+  registerScopedThemeRoutes(app, deps);
   registerChapterRoutes(app, deps);
   registerImportRoutes(app, deps);
   registerSoloRoutes(app, deps);
@@ -108,6 +121,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   app.decorate("hub", hub);
   registerDuelAsyncRoutes(app, deps, hub);
   registerStatsRoutes(app, deps);
+  registerOverviewRoutes(app, deps);
   registerSocialRoutes(app, deps, hub);
   registerProgressRoutes(app, deps);
   registerMemberRoutes(app, deps);

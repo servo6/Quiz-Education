@@ -6,6 +6,19 @@ let globalCache: { at: number; value: Partial<Settings> } | null = null;
 /** À appeler après toute écriture dans la table Setting. */
 export function invalidateSettings(): void {
   globalCache = null;
+  orgCache.clear();
+}
+
+/** Réglages propres à une organisation (clé « org:<id> » de la table Setting). */
+const orgCache = new Map<string, { at: number; value: Partial<Settings> }>();
+export async function loadOrgSettings(prisma: PrismaClient, organizationId: string | null | undefined): Promise<Partial<Settings>> {
+  if (!organizationId) return {};
+  const hit = orgCache.get(organizationId);
+  if (hit && Date.now() - hit.at < 15_000) return hit.value;
+  const row = await prisma.setting.findUnique({ where: { key: `org:${organizationId}` } });
+  const value = parseStoredSettings(row?.value);
+  orgCache.set(organizationId, { at: Date.now(), value });
+  return value;
 }
 
 export async function loadGlobalSettings(prisma: PrismaClient): Promise<Partial<Settings>> {
@@ -28,7 +41,8 @@ async function readGlobalSettings(prisma: PrismaClient): Promise<Partial<Setting
   return parseStoredSettings(JSON.stringify(obj));
 }
 
-/** Paramètres effectifs d'une matière : défauts < globaux < surcharges de la matière. */
-export async function loadEffectiveSettings(prisma: PrismaClient, subjectSettingsJson: string): Promise<Settings> {
-  return mergeSettings(await loadGlobalSettings(prisma), parseStoredSettings(subjectSettingsJson));
+/** Paramètres effectifs d'une matière : défauts < globaux < organisation < surcharges de la matière. */
+export async function loadEffectiveSettings(prisma: PrismaClient, subjectSettingsJson: string, organizationId?: string | null): Promise<Settings> {
+  const [g, o] = await Promise.all([loadGlobalSettings(prisma), loadOrgSettings(prisma, organizationId)]);
+  return mergeSettings({ ...g, ...o }, parseStoredSettings(subjectSettingsJson));
 }

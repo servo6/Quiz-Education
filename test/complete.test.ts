@@ -5,7 +5,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { buildApp } from "../src/app.ts";
 import { DuelEngine, type Hub } from "../src/duel/engine.ts";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject, assignManager } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -20,7 +20,7 @@ before(async () => {
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
   const mk = async (name: string, accessName: string) =>
-    (await call(env, admin, "POST", "/api/subjects", { name, accessName, accessPassword: "acces-123" })).json().subject.id as string;
+    (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   subjectId = await mk("Chimie", "chimie");
   otherId = await mk("Histoire", "histoire");
   chapterId = (await call(env, admin, "POST", `/api/subjects/${subjectId}/import/commit`, { raw: sampleBlock(40, "A"), newChapterName: "A" })).json().chapterId;
@@ -31,7 +31,7 @@ after(() => env.close());
 const settings = (s: Record<string, unknown>) => call(env, admin, "PATCH", `/api/subjects/${subjectId}`, { settings: s });
 async function player(accessName = "chimie") {
   const u = await register(env, `cmp-${++counter}`);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName, accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, accessName);
   return u;
 }
 const originalAnswer = async (gqId: string) => (await env.prisma.gameQuestion.findUniqueOrThrow({ where: { id: gqId }, include: { question: true } })).question;
@@ -213,13 +213,13 @@ test("revanche : après la fin seulement, mêmes joueurs, le demandeur devient c
 
 test("adversaire aléatoire : même matière, jamais soi-même, jamais quelqu'un déjà affronté en cours", async () => {
   const aloneId = await (async () => {
-    const id = (await call(env, admin, "POST", "/api/subjects", { name: "Seul", accessName: "seul", accessPassword: "acces-123" })).json().subject.id as string;
+    const id = (await call(env, admin, "POST", "/api/subjects", { name: "Seul" })).json().subject.id as string;
     return id;
   })();
   await env.prisma.membership.deleteMany({ where: { subjectId: aloneId } }); // l'admin devient membre en créant la matière
   const aloneChapter = (await call(env, admin, "POST", `/api/subjects/${aloneId}/import/commit`, { raw: sampleBlock(10, "S"), newChapterName: "S" })).json().chapterId;
   const solo = await register(env, `cmp-${++counter}`);
-  await call(env, solo.cookie, "POST", "/api/subjects/join", { accessName: "seul", accessPassword: "acces-123" });
+  await joinSubject(env, solo.cookie, "seul");
   const none = await call(env, solo.cookie, "POST", `/api/subjects/${aloneId}/duels/random`, { chapterId: aloneChapter });
   assert.equal(none.statusCode, 404);
   assert.equal(none.json().error.code, "no_opponent");
@@ -299,24 +299,10 @@ test("mot de passe personnel", async () => {
   assert.equal((await env.app.inject({ method: "POST", url: "/api/auth/login", payload: { username: name, password: "nouveau-mdp-1" } })).statusCode, 200);
 });
 
-test("rôles : nommer / retirer un administrateur", async () => {
-  const u = await player();
+test("rôles : plus aucune promotion possible", async () => {
   const v = await player();
-  assert.equal((await call(env, u.cookie, "PUT", `/api/users/${v.id}/role`, { role: "ADMIN" })).statusCode, 403);
-  assert.equal((await call(env, admin, "PUT", `/api/users/${v.id}/role`, { role: "SUPER" })).statusCode, 400);
-  const adminUser = await env.prisma.user.findFirstOrThrow({ where: { role: "ADMIN", username: ADMIN.username } });
-  assert.equal((await call(env, admin, "PUT", `/api/users/${adminUser.id}/role`, { role: "USER" })).statusCode, 422); // soi-même
-  assert.equal((await call(env, admin, "PUT", `/api/users/inconnu/role`, { role: "ADMIN" })).statusCode, 404);
-
-  assert.equal((await call(env, admin, "PUT", `/api/users/${v.id}/role`, { role: "ADMIN" })).json().role, "ADMIN");
-  assert.equal((await call(env, v.cookie, "GET", "/api/users")).statusCode, 200); // il a maintenant les droits
-  // retiré : redevient simple utilisateur, ou responsable s'il gère encore une matière
-  await call(env, admin, "PUT", `/api/subjects/${subjectId}/managers/${v.id}`).catch(() => {});
-  assert.equal((await call(env, admin, "PUT", `/api/users/${v.id}/role`, { role: "USER" })).json().role, "USER");
-  const w = await player();
-  await call(env, admin, "PUT", `/api/subjects/${subjectId}/managers/${w.id}`);
-  await call(env, admin, "PUT", `/api/users/${w.id}/role`, { role: "ADMIN" }).catch(() => {});
-  assert.ok(await env.prisma.adminLog.findFirst({ where: { action: "SET_ROLE" } }));
+  assert.equal((await call(env, admin, "PUT", `/api/users/${v.id}/role`, { role: "ADMIN" })).statusCode, 404);
+  assert.equal((await call(env, v.cookie, "GET", "/api/users")).statusCode, 403);
 });
 
 test("liste des utilisateurs : filtres et pagination", async () => {
@@ -399,11 +385,11 @@ test("fichiers statiques : page d'accueil, repli, API intacte, en-têtes de séc
 });
 
 test("l'administrateur devient membre des matières qu'il crée et peut entrer dans les autres sans mot de passe d'accès", async () => {
-  const created = (await call(env, admin, "POST", "/api/subjects", { name: "AdminMembre", accessName: "adminmembre", accessPassword: "acces-123" })).json().subject.id as string;
+  const created = (await call(env, admin, "POST", "/api/subjects", { name: "AdminMembre" })).json().subject.id as string;
   const me1 = (await call(env, admin, "GET", "/api/me")).json();
   assert.ok(me1.subjects.some((s: { id: string }) => s.id === created));
 
-  const other = (await call(env, admin, "POST", "/api/subjects", { name: "AutreMatiere", accessName: "autrematiere", accessPassword: "acces-123" })).json().subject.id as string;
+  const other = (await call(env, admin, "POST", "/api/subjects", { name: "AutreMatiere" })).json().subject.id as string;
   await env.prisma.membership.deleteMany({ where: { subjectId: other } });
   assert.equal((await call(env, admin, "POST", "/api/me/active-subject", { subjectId: other })).statusCode, 200);
   assert.ok((await call(env, admin, "GET", "/api/me")).json().subjects.some((s: { id: string }) => s.id === other));

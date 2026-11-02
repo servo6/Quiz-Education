@@ -97,13 +97,13 @@ export function donut({ segments, center, sub, size = 150 }) {
 }
 
 /** Barres horizontales en HTML (accessibles) : rows [{ label, value (0-100 ou null), note }]. */
-export function hbars(rows, { tone = true } = {}) {
+export function hbars(rows, { tone = true, raw = false } = {}) {
   return h("div.hbars", rows.map((r) => {
     const v = r.value;
     const cls = v == null ? "" : !tone ? "" : v >= 75 ? "good" : v >= 50 ? "warn" : "bad";
-    return h("div.hb", h("div.hb-top", h("span.hb-label", r.label), h("strong", v == null ? "–" : `${v} %`)),
+    return h("div.hb", h("div.hb-top", h("span.hb-label", r.label), h("strong", raw ? (r.note ?? "") : v == null ? "–" : `${v} %`)),
       h("div.hb-track", { role: "img", "aria-label": `${r.label} : ${v ?? "pas de données"}` }, h("i", { class: cls, style: `width:${v ?? 0}%` })),
-      r.note ? h("span.muted.small", r.note) : null);
+      r.note && !raw ? h("span.muted.small", r.note) : null);
   }));
 }
 

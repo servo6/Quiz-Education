@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject, assignManager } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -10,8 +10,8 @@ before(async () => {
   env = await createTestEnv();
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
-  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Chimie", accessName: "chimie", accessPassword: "acces-123" })).json().subject.id;
-  otherSubjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Histoire", accessName: "histoire", accessPassword: "acces-123" })).json().subject.id;
+  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Chimie" })).json().subject.id;
+  otherSubjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Histoire" })).json().subject.id;
 });
 after(() => env.close());
 
@@ -105,7 +105,7 @@ test("permissions : utilisateur simple 403, responsable de la matière oui, resp
   assert.equal((await call(env, plain.cookie, "POST", importUrl(subjectId, "preview"), { raw: sampleBlock(1), newChapterName: "Z" })).statusCode, 403);
 
   const mgr = await register(env, "resp");
-  await call(env, admin, "PUT", `/api/subjects/${subjectId}/managers/${mgr.id}`);
+  await assignManager(env, subjectId, mgr.id);
   const ok = await call(env, mgr.cookie, "POST", importUrl(subjectId, "commit"), { raw: sampleBlock(3, "Resp"), newChapterName: "Par le responsable" });
   assert.equal(ok.statusCode, 201);
   assert.equal((await call(env, mgr.cookie, "POST", importUrl(otherSubjectId, "commit"), { raw: sampleBlock(3, "Resp"), newChapterName: "Interdit" })).statusCode, 403);
@@ -119,7 +119,7 @@ test("liste des chapitres : membres et responsables seulement, avec le nombre de
   assert.equal((await call(env, outsider.cookie, "GET", `/api/subjects/${subjectId}/chapters`)).statusCode, 403);
 
   const member = await register(env, "membre");
-  await call(env, member.cookie, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" });
+  await joinSubject(env, member.cookie, "chimie");
   const res = await call(env, member.cookie, "GET", `/api/subjects/${subjectId}/chapters`);
   assert.equal(res.statusCode, 200);
   const atomes = res.json().chapters.find((c: { name: string }) => c.name === "Atomes");
@@ -184,7 +184,7 @@ test("supprimer un chapitre supprime ses questions ; le nom peut être réutilis
 
 test("responsable : ne peut pas supprimer dans une autre matière", async () => {
   const mgr = await register(env, "resp2");
-  await call(env, admin, "PUT", `/api/subjects/${otherSubjectId}/managers/${mgr.id}`);
+  await assignManager(env, otherSubjectId, mgr.id);
   const chapter = await env.prisma.chapter.findFirstOrThrow({ where: { name: "Atomes" } });
   assert.equal((await call(env, mgr.cookie, "DELETE", `/api/chapters/${chapter.id}`)).statusCode, 403);
   assert.equal((await call(env, mgr.cookie, "POST", `/api/chapters/${chapter.id}/questions/delete-since`, { since: "2020-01-01T00:00:00Z" })).statusCode, 403);

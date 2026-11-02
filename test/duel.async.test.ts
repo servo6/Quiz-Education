@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { expireDueDuels } from "../src/routes/duelAsync.ts";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -17,7 +17,7 @@ before(async () => {
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
   const mk = async (name: string, accessName: string) =>
-    (await call(env, admin, "POST", "/api/subjects", { name, accessName, accessPassword: "acces-123" })).json().subject.id as string;
+    (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   subjectId = await mk("Chimie", "chimie");
   otherSubjectId = await mk("Histoire", "histoire");
   const imp = async (sid: string, name: string, n: number) =>
@@ -33,7 +33,7 @@ const settings = (s: Record<string, unknown>) => call(env, admin, "PATCH", `/api
 
 async function player(sid = "chimie") {
   const u = await register(env, `async-${++counter}`);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: sid, accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, sid);
   return u;
 }
 const create = (cookie: string, opponentId: string, chapterId = chA, sid = subjectId) => call(env, cookie, "POST", "/api/duels", { subjectId: sid, opponentId, chapterId });

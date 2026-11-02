@@ -55,13 +55,13 @@ export interface UnlockContext {
 /** Niveau le plus haut atteint dans les matières de l'utilisateur, ses badges et les titres globaux. */
 export async function unlockContext(prisma: PrismaClient, userId: string): Promise<UnlockContext> {
   const [memberships, badges, { tiers }] = await Promise.all([
-    prisma.membership.findMany({ where: { userId, revokedAt: null }, include: { subject: { select: { settings: true } } } }),
+    prisma.membership.findMany({ where: { userId, revokedAt: null }, include: { subject: { select: { settings: true, organizationId: true } } } }),
     prisma.userBadge.findMany({ where: { userId }, include: { badge: { select: { code: true } } } }),
     loadTiers(prisma),
   ]);
   let maxLevel = 1;
   for (const m of memberships) {
-    const s = await loadEffectiveSettings(prisma, m.subject.settings);
+    const s = await loadEffectiveSettings(prisma, m.subject.settings, m.subject.organizationId);
     maxLevel = Math.max(maxLevel, levelFromXp(m.xp, { base: s.levelBase, exponent: s.levelExponent }).level);
   }
   return { maxLevel, badgeCodes: new Set(badges.map((b) => b.badge.code)), tiers };

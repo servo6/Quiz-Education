@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject, assignManager } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -14,13 +14,13 @@ before(async () => {
 after(() => env.close());
 
 async function newSubject(name: string, accessName: string) {
-  const id = (await call(env, admin, "POST", "/api/subjects", { name, accessName, accessPassword: "acces-123" })).json().subject.id as string;
+  const id = (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   const chapterId = (await call(env, admin, "POST", `/api/subjects/${id}/import/commit`, { raw: sampleBlock(12, name), newChapterName: "Ch" })).json().chapterId as string;
-  return { id, chapterId, name, accessName };
+  return { id, chapterId, name, accessName: name };
 }
 async function member(accessName: string) {
   const u = await register(env, `adm-${++counter}`);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName, accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, accessName);
   return u;
 }
 
@@ -29,7 +29,7 @@ test("suppression d'une matière : confirmation, droits, tout est effacé, le re
   const keep = await newSubject("A garder", "a-garder");
   const [u1, u2] = [await member(s.accessName), await member(s.accessName)];
   const keeper = await member(keep.accessName);
-  await call(env, keeper.cookie, "POST", "/api/subjects/join", { accessName: s.accessName, accessPassword: "acces-123" });
+  await joinSubject(env, keeper.cookie, s.accessName);
 
   // contenu : solo, duel différé, XP, titres, responsable
   await call(env, admin, "PATCH", `/api/subjects/${s.id}`, { settings: { soloGamesPerDay: 0, soloQuestions: 3, roundsPerDuel: 2, questionsPerRound: 2 } });
@@ -41,7 +41,7 @@ test("suppression d'une matière : confirmation, droits, tout est effacé, le re
   await call(env, u1.cookie, "GET", `/api/duels/${duel.json().duel.id}/current`); // crée un QuestionServe
   await call(env, admin, "PUT", `/api/subjects/${s.id}/tiers`, { tiers: [{ name: "T", minLevel: 1 }] });
   const mgr = await member(s.accessName);
-  await call(env, admin, "PUT", `/api/subjects/${s.id}/managers/${mgr.id}`);
+  await assignManager(env, s.id, mgr.id);
   await call(env, u1.cookie, "POST", "/api/me/active-subject", { subjectId: s.id });
   const keepGame = (await call(env, keeper.cookie, "POST", "/api/solo/start", { subjectId: keep.id, chapterId: keep.chapterId })).json().game.id;
 
@@ -61,7 +61,7 @@ test("suppression d'une matière : confirmation, droits, tout est effacé, le re
   assert.equal(res.statusCode, 200, res.body);
   assert.equal(res.json().deleted.chapters, 1);
   assert.equal(res.json().deleted.questions, 12);
-  assert.ok(res.json().deleted.members >= 4);
+  assert.ok(res.json().deleted.members >= 3);
 
   const gone = async (m: string, where: object) => assert.equal(await (env.prisma as any)[m].count({ where }), 0, m);
   await gone("subject", { id: s.id });
@@ -77,7 +77,7 @@ test("suppression d'une matière : confirmation, droits, tout est effacé, le re
 
   // effets sur les comptes
   assert.equal((await env.prisma.user.findUniqueOrThrow({ where: { id: u1.id } })).activeSubjectId, null);
-  assert.equal((await env.prisma.user.findUniqueOrThrow({ where: { id: mgr.id } })).role, "USER");
+  assert.equal((await env.prisma.user.findUniqueOrThrow({ where: { id: mgr.id } })).role, "SUBJECT_MANAGER");
   assert.equal((await call(env, u1.cookie, "GET", "/api/me")).statusCode, 200);
   assert.equal((await call(env, u1.cookie, "POST", "/api/solo/start", { subjectId: s.id, chapterId: s.chapterId })).statusCode, 403);
   assert.equal((await call(env, admin, "DELETE", `/api/subjects/${s.id}`, { confirmName: s.name })).statusCode, 404);
@@ -88,7 +88,7 @@ test("suppression d'une matière : confirmation, droits, tout est effacé, le re
   assert.ok(await env.prisma.game.findUnique({ where: { id: keepGame } }));
   assert.ok(await env.prisma.membership.findFirst({ where: { userId: keeper.id, subjectId: keep.id } }));
   // le nom d'accès peut être réutilisé
-  assert.equal((await call(env, admin, "POST", "/api/subjects", { name: "A supprimer", accessName: "a-supprimer", accessPassword: "acces-123" })).statusCode, 201);
+  assert.equal((await call(env, admin, "POST", "/api/subjects", { name: "A supprimer" })).statusCode, 201);
 });
 
 test("suppression refusée tant qu'un duel en direct est en cours", async () => {
@@ -142,7 +142,7 @@ test("journal : un responsable ne voit que ses matières ; un joueur rien", asyn
   const a = await newSubject("Mienne", "mienne");
   const b = await newSubject("Autre", "autre");
   const mgr = await member(a.accessName);
-  await call(env, admin, "PUT", `/api/subjects/${a.id}/managers/${mgr.id}`);
+  await assignManager(env, a.id, mgr.id);
   const player = await member(a.accessName);
   const mgrCookie = await login(env, `adm-${counter - 1}`, "password-123");
 

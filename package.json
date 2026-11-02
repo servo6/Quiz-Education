@@ -7,7 +7,7 @@
     "dev": "tsx watch --env-file=.env src/server.ts",
     "start": "tsx --env-file=.env src/server.ts",
     "test:unit": "tsx --test src/import/validate.test.ts src/xp.test.ts src/permissions.test.ts test/time.test.ts",
-    "test": "tsx --env-file=.env --test src/import/validate.test.ts src/xp.test.ts src/permissions.test.ts src/titles.test.ts src/shuffle.test.ts test/time.test.ts test/auth.test.ts test/subjects.test.ts test/import.test.ts test/solo.test.ts test/duel.engine.test.ts test/duel.async.test.ts test/duelMatrix.test.ts test/progress.test.ts test/admin.test.ts test/library.test.ts test/complete.test.ts test/duel.socket.test.ts test/adminNotPlayer.test.ts test/statsSocial.test.ts",
+    "test": "tsx --env-file=.env --test src/import/validate.test.ts src/xp.test.ts src/permissions.test.ts src/titles.test.ts src/shuffle.test.ts test/time.test.ts test/auth.test.ts test/subjects.test.ts test/import.test.ts test/solo.test.ts test/duel.engine.test.ts test/duel.async.test.ts test/duelMatrix.test.ts test/progress.test.ts test/admin.test.ts test/library.test.ts test/complete.test.ts test/duel.socket.test.ts test/adminNotPlayer.test.ts test/statsSocial.test.ts test/organizations.test.ts test/email.test.ts",
     "typecheck": "tsc",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

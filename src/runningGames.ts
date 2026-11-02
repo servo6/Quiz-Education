@@ -14,14 +14,14 @@ export async function applyTimeToRunningGames(prisma: PrismaClient, subjectId: s
   invalidateSettings();
   const games = await prisma.game.findMany({
     where: { status: "IN_PROGRESS", mode: { in: ["SOLO", "DUEL"] }, ...(subjectId ? { subjectId } : {}) },
-    select: { id: true, config: true, subjectId: true, subject: { select: { settings: true } } },
+    select: { id: true, config: true, subjectId: true, subject: { select: { settings: true, organizationId: true } } },
   });
   const perSubject = new Map<string, number>();
   let n = 0;
   for (const g of games) {
     let t = perSubject.get(g.subjectId);
     if (t === undefined) {
-      t = (await loadEffectiveSettings(prisma, g.subject.settings)).timePerQuestionSec;
+      t = (await loadEffectiveSettings(prisma, g.subject.settings, g.subject.organizationId)).timePerQuestionSec;
       perSubject.set(g.subjectId, t);
     }
     try {

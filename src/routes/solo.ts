@@ -185,7 +185,7 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     await requireMembership(prisma, ctx.user.id, req.params.id, ctx.user.role);
     const subject = await prisma.subject.findUnique({ where: { id: req.params.id } });
     if (!subject) throw new HttpError(404, "subject_not_found", "Matière introuvable");
-    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
     const [solo, activeDuels] = await Promise.all([
       dailyStatus(ctx.user.id, subject.id, settings.soloGamesPerDay),
       settings.maxActiveDuels > 0
@@ -205,7 +205,7 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     await requireMembership(prisma, ctx.user.id, req.params.id);
     const subject = await prisma.subject.findUnique({ where: { id: req.params.id } });
     if (!subject) throw new HttpError(404, "subject_not_found", "Matière introuvable");
-    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
     return { ...(await dailyStatus(ctx.user.id, subject.id, settings.soloGamesPerDay)), questionsPerGame: settings.soloQuestions };
   });
 
@@ -215,7 +215,7 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     const { subjectId, chapterId } = StartBody.parse(req.body);
     const membership = await requireMembership(prisma, ctx.user.id, subjectId);
     const subject = await prisma.subject.findUniqueOrThrow({ where: { id: subjectId } });
-    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
 
     // Une partie déjà en cours est reprise : elle ne consomme pas une seconde partie du jour.
     const status = await dailyStatus(ctx.user.id, subjectId, settings.soloGamesPerDay);

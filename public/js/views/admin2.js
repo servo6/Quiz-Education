@@ -48,23 +48,11 @@ export function editQuestion(q, chapters, chapterId, onSaved) {
   });
 }
 
-// ───────── Responsables de matière ─────────
-export async function managersSection(sub, memberList) {
-  const r = await get(`/api/subjects/${sub.id}`).catch(() => null);
-  const ids = new Set((r?.managers ?? []).map((m) => m.id));
-  return { ids, toggle: async (m, onDone) => {
-    try {
-      if (ids.has(m.userId)) await del(`/api/subjects/${sub.id}/managers/${m.userId}`);
-      else await put(`/api/subjects/${sub.id}/managers/${m.userId}`, {});
-      toast(ids.has(m.userId) ? "Rôle retiré" : `${m.username} est maintenant responsable`, "good"); onDone();
-    } catch (e) { fail(e); } } };
-}
-
 // ───────── Comptes + vue d'ensemble + sauvegarde ─────────
 export async function comptes() {
   const ov = await get("/api/admin/overview");
   const q = h("input.input", { type: "search", placeholder: "Chercher un compte", "aria-label": "Chercher un compte" });
-  const filter = h("select.input", { "aria-label": "Filtre" }, [["", "Tous"], ["banned", "Suspendus"], ["ADMIN", "Administrateurs"], ["SUBJECT_MANAGER", "Responsables"]].map(([v, l]) => h("option", { value: v }, l)));
+  const filter = h("select.input", { "aria-label": "Filtre" }, [["", "Tous"], ["banned", "Suspendus"], ["ORG_ADMIN", "Administrateurs d'organisation"], ["SUBJECT_MANAGER", "Responsables"], ["USER", "Joueurs"]].map(([v, l]) => h("option", { value: v }, l)));
   const list = h("div.list");
   const more = h("button.btn.ghost.block", { hidden: true });
   let cursor = null;
@@ -86,15 +74,16 @@ export async function comptes() {
     const me = u.id === S.me.user.id;
     return h("div.item", { style: "flex-wrap:wrap" },
       h("span.initial", u.username.slice(0, 1).toUpperCase()),
-      h("div.grow", h("strong", u.username, me ? " (toi)" : ""), h("div.muted.small", `${u.subjectCount} matière${u.subjectCount > 1 ? "s" : ""} · inscrit le ${fmt(u.createdAt)}`)),
-      u.role !== "USER" ? h("span.chip.amber", u.role === "ADMIN" ? "admin" : "responsable") : null,
+      h("div.grow", h("strong", u.username, me ? " (toi)" : ""), h("div.muted.small", `${u.email ? u.email + " · " : ""}${u.subjectCount} matière${u.subjectCount > 1 ? "s" : ""} · inscrit le ${fmt(u.createdAt)}`)),
+      u.role !== "USER" ? h("span.chip.amber", u.role === "ADMIN" ? "super admin" : u.role === "ORG_ADMIN" ? "admin d'organisation" : "responsable") : null,
       u.banned ? h("span.chip.bad", "suspendu") : null,
-      me ? null : h("div.row.wrap",
-        u.banned ? h("button.btn.small", { onclick: act(() => post(`/api/users/${u.id}/unban`, {})) }, "Rétablir")
-          : u.role === "ADMIN" ? null : h("button.btn.small.danger", { onclick: act(async () => { const reason = prompt(`Suspendre ${u.username} ? Ses duels en cours seront perdus. Motif (facultatif) :`); if (reason === null) return; await post(`/api/users/${u.id}/ban`, reason ? { reason } : {}); toast("Compte suspendu", "good"); }) }, "Suspendre"),
-        h("button.btn.small", { onclick: act(async () => { const pw = prompt(`Nouveau mot de passe pour ${u.username} (8 caractères minimum) :`); if (!pw) return; await post(`/api/users/${u.id}/reset-password`, { newPassword: pw }); toast("Mot de passe réinitialisé", "good"); }) }, "Mot de passe"),
-        u.role === "ADMIN" ? h("button.btn.small", { onclick: act(async () => { if (!confirm(`Retirer les droits d'administrateur à ${u.username} ?`)) return; await put(`/api/users/${u.id}/role`, { role: "USER" }); }) }, "Retirer admin")
-          : h("button.btn.small", { onclick: act(async () => { if (!confirm(`Donner les droits d'administrateur complets à ${u.username} ?`)) return; await put(`/api/users/${u.id}/role`, { role: "ADMIN" }); }) }, "Nommer admin")));
+      u.overdue ? h("span.chip.bad", "vérification dépassée") : null,
+      u.role !== "USER" && u.role !== "ADMIN" ? (u.emailVerified ? h("span.chip.good", "e-mail vérifié") : !u.overdue ? h("span.chip.amber", u.verifyDeadline ? `à vérifier avant le ${fmt(u.verifyDeadline)}` : "e-mail non vérifié") : null) : null,
+      !me && u.role !== "USER" && u.role !== "ADMIN" && !u.emailVerified && S.me.user.role === "ADMIN" ? h("button.btn.small", { onclick: act(async () => { const d = prompt(`Prolonger le délai de vérification de ${u.username} de combien de jours ? (1 à 90)`, "3"); if (!d) return; await post(`/api/users/${u.id}/extend-verification`, { days: Number(d) }); toast("Délai prolongé", "good"); }) }, "Prolonger") : null,
+      me || u.role === "ADMIN" ? null : h("div.row.wrap",
+        u.banned ? h("button.btn.small", { onclick: act(async () => { if (!confirm(`Rétablir le compte de ${u.username} ?`)) return; await post(`/api/users/${u.id}/unban`, {}); }) }, "Rétablir")
+          : h("button.btn.small.danger", { onclick: act(async () => { const reason = prompt(`Suspendre ${u.username} ? Ses duels en cours seront perdus. Motif (facultatif) :`); if (reason === null) return; await post(`/api/users/${u.id}/ban`, reason ? { reason } : {}); toast("Compte suspendu", "good"); }) }, "Suspendre"),
+        h("button.btn.small", { onclick: act(async () => { const pw = prompt(`Nouveau mot de passe pour ${u.username} (8 caractères minimum) :`); if (!pw) return; await post(`/api/users/${u.id}/reset-password`, { newPassword: pw }); toast("Mot de passe réinitialisé", "good"); }) }, "Mot de passe")));
   }
   let t; q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => load().catch(fail), 250); });
   filter.onchange = () => load().catch(fail);

@@ -1,5 +1,5 @@
-import { h, toast, fail } from "../lib.js";
-import { THEMES, themeConfig, personalTheme, setPersonalTheme, setPlatformTheme, applyTheme } from "../theme.js";
+import { h, toast, fail, get } from "../lib.js";
+import { THEMES, themeConfig, personalTheme, setPersonalTheme, setPlatformTheme, setScopeTheme, platformThemeOf, applyTheme } from "../theme.js";
 
 /** Carte de thème : miniature de l'interface dessinée avec les couleurs réelles du thème. */
 function themeCard(t, selected, onclick) {
@@ -35,6 +35,27 @@ export async function appearancePanel() {
     );
   };
   paint();
+  return root;
+}
+
+/** Apparence d'une organisation (`scope` = "organization") ou d'une matière ("subject") : thème de l'interface de gestion et thème par défaut des joueurs. */
+export async function scopedAppearancePanel(scope, items, text) {
+  const root = h("div.stack");
+  const sel = h("select.input", { "aria-label": scope === "organization" ? "Organisation" : "Matière" }, items.map((o) => h("option", { value: o.id }, o.name)));
+  const body = h("div.stack");
+  async function paint() {
+    const current = await platformThemeOf(scope, sel.value);
+    body.replaceChildren(h("section.card.stack",
+      h("div", h("h2", text.title), h("p.muted", text.help)),
+      h("div.themes",
+        themeCard({ id: themeConfig.theme, name: "Thème de la plateforme", desc: "Aucun thème particulier" }, !current, async () => {
+          try { await setScopeTheme(scope, sel.value, null); toast("Thème de la plateforme rétabli", "good"); paint(); } catch (ex) { fail(ex); } }),
+        ...THEMES.map((t) => themeCard(t, current === t.id, async () => {
+          try { await setScopeTheme(scope, sel.value, t.id); toast(`Thème « ${t.name} » appliqué`, "good"); paint(); } catch (ex) { fail(ex); } })))));
+  }
+  sel.onchange = () => paint().catch(fail);
+  await paint();
+  root.append(items.length > 1 ? sel : "", body);
   return root;
 }
 

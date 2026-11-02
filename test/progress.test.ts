@@ -2,7 +2,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { ensureDefaultAvatarItems } from "../src/avatar.ts";
 import { ensureDefaultBadges } from "../src/badges.ts";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject, assignManager } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -16,7 +16,7 @@ before(async () => {
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
   const mk = async (name: string, accessName: string) =>
-    (await call(env, admin, "POST", "/api/subjects", { name, accessName, accessPassword: "acces-123" })).json().subject.id as string;
+    (await call(env, admin, "POST", "/api/subjects", { name })).json().subject.id as string;
   subjectId = await mk("Chimie", "chimie");
   otherSubjectId = await mk("Histoire", "histoire");
   chapterId = (await call(env, admin, "POST", `/api/subjects/${subjectId}/import/commit`, { raw: sampleBlock(30, "A"), newChapterName: "A" })).json().chapterId;
@@ -28,7 +28,7 @@ after(() => env.close());
 
 async function player(sid = "chimie") {
   const u = await register(env, `prog-${++counter}`);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: sid, accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, sid);
   return u;
 }
 const setXp = (userId: string, xp: number, sid = subjectId) => env.prisma.membership.update({ where: { userId_subjectId: { userId, subjectId: sid } }, data: { xp } });
@@ -251,8 +251,8 @@ test("profil d'un joueur : même matière seulement, avec le bilan face à face"
 
 test("membres : liste, révocation par un responsable, limites de ses droits, rétablissement", async () => {
   const [mgr, victim, other, mgr2] = [await player(), await player(), await player(), await player("histoire")];
-  assert.equal((await call(env, admin, "PUT", `/api/subjects/${subjectId}/managers/${mgr.id}`)).statusCode, 200);
-  assert.equal((await call(env, admin, "PUT", `/api/subjects/${otherSubjectId}/managers/${mgr2.id}`)).statusCode, 200);
+  assert.equal((await assignManager(env, subjectId, mgr.id)).statusCode, 200);
+  assert.equal((await assignManager(env, otherSubjectId, mgr2.id)).statusCode, 200);
   const mgrCookie = (await login(env, `prog-${counter - 3}`, "password-123"));
 
   assert.equal((await call(env, victim.cookie, "GET", `/api/subjects/${subjectId}/members`)).statusCode, 403);
@@ -267,7 +267,7 @@ test("membres : liste, révocation par un responsable, limites de ses droits, r�
   const adminUser = await env.prisma.user.findFirstOrThrow({ where: { role: "ADMIN" } });
   await env.prisma.membership.create({ data: { userId: adminUser.id, subjectId } }).catch(() => {});
   assert.equal((await call(env, mgrCookie, "POST", `/api/subjects/${subjectId}/members/${adminUser.id}/revoke`)).statusCode, 403);
-  assert.equal((await call(env, mgrCookie, "POST", `/api/subjects/${subjectId}/members/${mgr.id}/revoke`)).statusCode, 422);
+  assert.equal((await call(env, mgrCookie, "POST", `/api/subjects/${subjectId}/members/${mgr.id}/revoke`)).statusCode, 404); // un responsable n'est pas un membre
 
   // révocation : plus d'accès au jeu, XP conservé, duel différé clos
   await setXp(victim.id, 500);
@@ -295,7 +295,7 @@ test("comptes : suspension, rétablissement, réinitialisation du mot de passe",
   const victim = await register(env, "a-suspendre");
   assert.equal((await call(env, u.cookie, "POST", `/api/users/${victim.id}/ban`)).statusCode, 403);
   const adminUser = await env.prisma.user.findFirstOrThrow({ where: { role: "ADMIN" } });
-  assert.equal((await call(env, admin, "POST", `/api/users/${adminUser.id}/ban`)).statusCode, 422);
+  assert.equal((await call(env, admin, "POST", `/api/users/${adminUser.id}/ban`)).statusCode, 403); // super admin intouchable
 
   assert.equal((await call(env, admin, "POST", `/api/users/${victim.id}/ban`, { reason: "spam" })).statusCode, 200);
   assert.equal((await call(env, admin, "POST", `/api/users/${victim.id}/ban`)).statusCode, 409);

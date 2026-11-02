@@ -53,7 +53,7 @@ export function registerSocialRoutes(app: FastifyInstance, { prisma, auth }: Dep
   });
 
   const noAdmin = (role: string) => {
-    if (role === "ADMIN") throw new HttpError(403, "admin_cannot_play", "Un administrateur n'a pas de messagerie de joueur");
+    if (role !== "USER") throw new HttpError(403, "admin_cannot_play", "Un administrateur n'a pas de messagerie de joueur");
   };
 
   /** L'amitié existe, est acceptée (si `accepted`) et concerne bien l'utilisateur. */
@@ -110,7 +110,7 @@ export function registerSocialRoutes(app: FastifyInstance, { prisma, auth }: Dep
     const { userId } = BodyUser.parse(req.body);
     if (userId === ctx.user.id) throw new HttpError(422, "self_friend", "Tu ne peux pas t'inviter toi-même");
     const target = await prisma.membership.findUnique({ where: { userId_subjectId: { userId, subjectId: req.params.id } }, include: { user: true } });
-    if (!target || target.revokedAt || target.user.bannedAt || target.user.role === "ADMIN") throw new HttpError(404, "player_not_found", "Joueur introuvable dans cette matière");
+    if (!target || target.revokedAt || target.user.bannedAt || target.user.role !== "USER") throw new HttpError(404, "player_not_found", "Joueur introuvable dans cette matière");
     const existing = await prisma.friendship.findFirst({
       where: { subjectId: req.params.id, OR: [{ requesterId: ctx.user.id, addresseeId: userId }, { requesterId: userId, addresseeId: ctx.user.id }] },
     });
@@ -191,7 +191,7 @@ export function registerSocialRoutes(app: FastifyInstance, { prisma, auth }: Dep
   // ── Pastilles : messages non lus et invitations reçues (toutes matières)
   app.get("/api/me/social-summary", async (req) => {
     const ctx = await auth(req);
-    if (ctx.actor.role === "ADMIN") return { unread: 0, invitations: 0 };
+    if (ctx.actor.role !== "USER") return { unread: 0, invitations: 0 };
     const cutoff = new Date(Date.now() - (await retentionDays(prisma)) * DAY_MS);
     const [unread, invitations] = await Promise.all([
       prisma.message.count({ where: { readAt: null, senderId: { not: ctx.user.id }, createdAt: { gte: cutoff }, friendship: { status: "ACCEPTED", OR: [{ requesterId: ctx.user.id }, { addresseeId: ctx.user.id }] } } }),

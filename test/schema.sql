@@ -5,22 +5,52 @@ CREATE TABLE "User" (
   "username" TEXT NOT NULL,
   "passwordHash" TEXT NOT NULL,
   "role" TEXT NOT NULL DEFAULT 'USER',
+  "createdById" TEXT,
   "avatar" TEXT NOT NULL DEFAULT '{}',
   "activeSubjectId" TEXT,
   "bannedAt" TIMESTAMP(3),
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "email" TEXT,
+  "emailVerifiedAt" TIMESTAMP(3),
+  "verifyDeadline" TIMESTAMP(3)
 );
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE TABLE "Subject" (
   "id" TEXT NOT NULL PRIMARY KEY,
+  "organizationId" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "accessName" TEXT NOT NULL,
   "accessPasswordHash" TEXT NOT NULL,
   "settings" TEXT NOT NULL DEFAULT '{}',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX "Subject_name_key" ON "Subject"("name");
 CREATE UNIQUE INDEX "Subject_accessName_key" ON "Subject"("accessName");
+CREATE UNIQUE INDEX "Subject_organizationId_name_key" ON "Subject"("organizationId", "name");
+CREATE TABLE "Organization" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "accessName" TEXT NOT NULL,
+  "accessPasswordHash" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "Organization_name_key" ON "Organization"("name");
+CREATE UNIQUE INDEX "Organization_accessName_key" ON "Organization"("accessName");
+CREATE TABLE "OrgAdmin" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "organizationId" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "OrgAdmin_userId_organizationId_key" ON "OrgAdmin"("userId", "organizationId");
+CREATE TABLE "OrgMember" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "organizationId" TEXT NOT NULL,
+  "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "revokedAt" TIMESTAMP(3)
+);
+CREATE UNIQUE INDEX "OrgMember_userId_organizationId_key" ON "OrgMember"("userId", "organizationId");
 CREATE TABLE "SubjectManager" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "userId" TEXT NOT NULL,
@@ -207,3 +237,15 @@ CREATE TABLE "Message" (
 );
 CREATE INDEX "Message_friendshipId_createdAt_idx" ON "Message"("friendshipId", "createdAt");
 CREATE INDEX "Message_createdAt_idx" ON "Message"("createdAt");
+CREATE TABLE "EmailToken" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "kind" TEXT NOT NULL,
+  "tokenHash" TEXT NOT NULL,
+  "email" TEXT NOT NULL,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "usedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "EmailToken_tokenHash_key" ON "EmailToken"("tokenHash");
+CREATE INDEX "EmailToken_userId_kind_idx" ON "EmailToken"("userId", "kind");

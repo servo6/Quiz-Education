@@ -1,6 +1,6 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv } from "./helpers.ts";
+import { ADMIN, call, createTestEnv, login, register, sampleBlock, seedAdmin, type TestEnv, joinSubject } from "./helpers.ts";
 
 let env: TestEnv;
 let admin: string;
@@ -11,14 +11,14 @@ before(async () => {
   env = await createTestEnv();
   await seedAdmin(env);
   admin = await login(env, ADMIN.username, ADMIN.password);
-  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Chimie", accessName: "chimie", accessPassword: "acces-123" })).json().subject.id;
+  subjectId = (await call(env, admin, "POST", "/api/subjects", { name: "Chimie" })).json().subject.id;
   chapterId = (await call(env, admin, "POST", `/api/subjects/${subjectId}/import/commit`, { raw: sampleBlock(20, "A"), newChapterName: "A" })).json().chapterId;
 });
 after(() => env.close());
 
 async function player(name: string) {
   const u = await register(env, name);
-  await call(env, u.cookie, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" });
+  await joinSubject(env, u.cookie, "chimie");
   return u;
 }
 
@@ -34,7 +34,7 @@ test("l'administrateur n'est membre d'aucune matière et voit toutes les matièr
 
 test("l'administrateur ne peut ni rejoindre, ni jouer, ni défier", async () => {
   const p = await player("joueur-a");
-  assert.equal((await call(env, admin, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" })).statusCode, 403);
+  assert.equal((await joinSubject(env, admin, "chimie")).statusCode, 403);
   assert.equal((await call(env, admin, "POST", "/api/solo/start", { subjectId, chapterId })).statusCode, 403);
   assert.equal((await call(env, admin, "POST", "/api/duels", { subjectId, opponentId: p.id, chapterId })).statusCode, 403);
   assert.equal((await call(env, admin, "GET", `/api/subjects/${subjectId}/leaderboard`)).statusCode, 403);
@@ -46,7 +46,7 @@ test("un ancien administrateur-membre n'apparaît ni au classement, ni parmi les
   const p = await player("joueur-b");
   const q = await player("joueur-c");
   const ghost = await register(env, "ex-membre");
-  await call(env, ghost.cookie, "POST", "/api/subjects/join", { accessName: "chimie", accessPassword: "acces-123" });
+  await joinSubject(env, ghost.cookie, "chimie");
   await env.prisma.user.update({ where: { id: ghost.id }, data: { role: "ADMIN" } });
 
   const board = (await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/leaderboard`)).json();

@@ -345,12 +345,12 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
     await requireMembership(prisma, userId, subjectId);
     const opponent = await prisma.user.findUnique({ where: { id: opponentId } });
     const oppMember = await prisma.membership.findUnique({ where: { userId_subjectId: { userId: opponentId, subjectId } } });
-    if (!opponent || opponent.bannedAt || opponent.role === "ADMIN" || !oppMember || oppMember.revokedAt) {
+    if (!opponent || opponent.bannedAt || opponent.role !== "USER" || !oppMember || oppMember.revokedAt) {
       throw new HttpError(422, "not_same_subject", "Cet utilisateur n'est pas membre de cette matière");
     }
 
     const subject = await prisma.subject.findUniqueOrThrow({ where: { id: subjectId } });
-    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
 
     // Un seul duel en cours entre deux mêmes joueurs dans une matière.
     const existing = await prisma.game.findFirst({
@@ -423,7 +423,7 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
       select: { userId: true },
     });
     const candidates = await prisma.membership.findMany({
-      where: { subjectId: req.params.id, revokedAt: null, userId: { notIn: [ctx.user.id, ...busyWith.map((b) => b.userId)] }, user: { bannedAt: null, role: { not: "ADMIN" } } },
+      where: { subjectId: req.params.id, revokedAt: null, userId: { notIn: [ctx.user.id, ...busyWith.map((b) => b.userId)] }, user: { bannedAt: null, role: "USER" } },
       select: { userId: true },
       take: 500,
     });
@@ -459,7 +459,7 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
   // ── Ce qui m'attend, toutes matières confondues (pour une pastille "à ton tour" et les rappels avant expiration)
   app.get("/api/me/summary", async (req) => {
     const ctx = await auth(req);
-    if (ctx.actor.role === "ADMIN") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
+    if (ctx.actor.role !== "USER") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
     await expireDueDuels(prisma, new Date(), (id) => notifyEnded(prisma, hub, id));
     const games = await prisma.game.findMany({
       where: { mode: "DUEL", status: "IN_PROGRESS", players: { some: { userId: ctx.user.id } }, subject: { memberships: { some: { userId: ctx.user.id, revokedAt: null } } } },

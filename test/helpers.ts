@@ -1,3 +1,4 @@
+import { hashPassword } from "../src/password.ts";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -5,6 +6,7 @@ import pg from "pg";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { buildApp } from "../src/app.ts";
+import { createMailer, type Mail } from "../src/mailer.ts";
 import type { Timings } from "../src/duel/engine.ts";
 import { createPrisma } from "../src/db.ts";
 import { ensureAdmin } from "../src/bootstrap.ts";
@@ -14,6 +16,8 @@ export interface TestEnv {
   app: FastifyInstance;
   prisma: PrismaClient;
   close: () => Promise<void>;
+  /** E-mails « envoyés » pendant le test. */
+  outbox: Mail[];
 }
 
 function testDatabaseUrl(): string {
@@ -43,7 +47,10 @@ export async function createTestEnv(
   }
 
   const prisma = createPrisma(url, { schema, max: 3 });
+  const mailer = createMailer({ provider: "memory" });
   const app = await buildApp({
+    mailer,
+    appUrl: "http://site.test",
     prisma,
     jwtSecret: "test-secret-test-secret-test-secret-123",
     rateLimit: opts.rateLimit ?? false,
@@ -53,6 +60,7 @@ export async function createTestEnv(
   return {
     app,
     prisma,
+    outbox: mailer.outbox!,
     close: async () => {
       await app.close();
       await prisma.$disconnect();
@@ -69,8 +77,37 @@ export async function createTestEnv(
 
 export const ADMIN = { username: "admin", password: "admin-password-1" };
 
+export const TEST_ORG = { name: "Organisation test" };
+
+/** Crée le super administrateur et l'organisation de test (les matières des tests y sont créées automatiquement). */
 export async function seedAdmin(env: TestEnv): Promise<void> {
   await ensureAdmin(env.prisma, ADMIN.username, ADMIN.password);
+  if (!(await env.prisma.organization.findUnique({ where: { name: TEST_ORG.name } }))) {
+    await env.prisma.organization.create({
+      data: { name: TEST_ORG.name, accessName: "orga-test", accessPasswordHash: await hashPassword("interne-12345") },
+    });
+  }
+}
+
+export const SUBJECT_KEY_PASSWORD = "acces-123";
+/** Un joueur rejoint la matière (par identifiant ou par nom) avec ses clés d'accès ; les clés sont fixées ici pour les tests. */
+export async function joinSubject(env: TestEnv, cookie: string, key: string) {
+  const subject = await env.prisma.subject.findFirst({ where: { OR: [{ id: key }, { name: { equals: key, mode: "insensitive" } }] } });
+  if (!subject) throw new Error(`matière introuvable : ${key}`);
+  const accessName = `k-${subject.id}`.toLowerCase();
+  if (subject.accessName !== accessName) {
+    await env.prisma.subject.update({ where: { id: subject.id }, data: { accessName, accessPasswordHash: await hashPassword(SUBJECT_KEY_PASSWORD) } });
+  }
+  return call(env, cookie, "POST", "/api/subjects/join", { accessName, accessPassword: SUBJECT_KEY_PASSWORD });
+}
+
+/** Raccourci de test : fait de ce compte un responsable de la matière (en production, le compte est créé par l'administrateur). */
+export async function assignManager(env: TestEnv, subjectId: string, userId: string): Promise<{ statusCode: number }> {
+  await env.prisma.user.update({ where: { id: userId }, data: { role: "SUBJECT_MANAGER" } });
+  await env.prisma.membership.deleteMany({ where: { userId } });
+  await env.prisma.orgMember.deleteMany({ where: { userId } });
+  await env.prisma.subjectManager.upsert({ where: { userId_subjectId: { userId, subjectId } }, create: { userId, subjectId }, update: {} });
+  return { statusCode: 200 };
 }
 
 /** Cookie de session d'un utilisateur déjà existant. */

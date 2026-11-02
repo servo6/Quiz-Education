@@ -220,7 +220,7 @@ export class DuelEngine {
     if (!this.hub.isOnline(toId)) throw new DuelError("opponent_offline", "Ce joueur n'est pas connecté");
 
     const members = await this.prisma.membership.findMany({
-      where: { subjectId, userId: { in: [fromId, toId] }, revokedAt: null, user: { bannedAt: null, role: { not: "ADMIN" } } },
+      where: { subjectId, userId: { in: [fromId, toId] }, revokedAt: null, user: { bannedAt: null, role: "USER" } },
       include: { user: { select: { id: true, username: true, avatar: true } } },
     });
     const me = members.find((m) => m.userId === fromId);
@@ -408,7 +408,7 @@ export class DuelEngine {
 
   private async startGame(c: Challenge): Promise<Game> {
     const subject = await this.prisma.subject.findUniqueOrThrow({ where: { id: c.subjectId } });
-    const s = await loadEffectiveSettings(this.prisma, subject.settings);
+    const s = await loadEffectiveSettings(this.prisma, subject.settings, subject.organizationId);
     const cfg: DuelConfig = {
       // Les duels en direct ont leurs propres réglages, indépendants du solo et des duels différés.
       timePerQuestionSec: s.liveTimePerQuestionSec,
