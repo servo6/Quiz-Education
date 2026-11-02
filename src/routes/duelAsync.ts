@@ -488,7 +488,7 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
     await requireMembership(prisma, ctx.user.id, req.params.id);
     await expireDueDuels(prisma);
     const games = await prisma.game.findMany({
-      where: { mode: "DUEL", subjectId: req.params.id, players: { some: { userId: ctx.user.id } } },
+      where: { mode: "DUEL", subjectId: req.params.id, players: { some: { userId: ctx.user.id, hiddenAt: null } } },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: gameInclude,

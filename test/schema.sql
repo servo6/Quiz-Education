@@ -88,7 +88,8 @@ CREATE TABLE "GamePlayer" (
   "userId" TEXT NOT NULL,
   "correctCount" INTEGER NOT NULL DEFAULT 0,
   "result" TEXT,
-  "xpEarned" INTEGER NOT NULL DEFAULT 0
+  "xpEarned" INTEGER NOT NULL DEFAULT 0,
+  "hiddenAt" TIMESTAMP(3)
 );
 CREATE UNIQUE INDEX "GamePlayer_gameId_userId_key" ON "GamePlayer"("gameId", "userId");
 CREATE INDEX "GamePlayer_userId_gameId_idx" ON "GamePlayer"("userId", "gameId");

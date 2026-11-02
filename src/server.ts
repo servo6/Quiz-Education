@@ -35,7 +35,7 @@ await prisma.membership.deleteMany({ where: { user: { role: "ADMIN" } } });
 // Et on clôt les duels non terminés où figurait un administrateur : ils ne pourraient plus être joués.
 await prisma.game.updateMany({ where: { status: "IN_PROGRESS", mode: { in: ["DUEL", "FRIENDLY"] }, players: { some: { user: { role: "ADMIN" } } } }, data: { status: "ABANDONED" } });
 // Messagerie : suppression des messages expirés au démarrage, puis toutes les heures.
-await Promise.all([purgeExpiredMessages(prisma), prisma.questionServe.count({ take: 1 }), prisma.friendship.count({ take: 1 }), prisma.chapter.findFirst({ select: { locked: true } })]).catch((e: unknown) => {
+await Promise.all([purgeExpiredMessages(prisma), prisma.questionServe.count({ take: 1 }), prisma.friendship.count({ take: 1 }), prisma.chapter.findFirst({ select: { locked: true } }), prisma.gamePlayer.findFirst({ select: { hiddenAt: true } })]).catch((e: unknown) => {
   const text = String((e as Error)?.message ?? e);
   if (/undefined \(reading/.test(text)) {
     console.error("\n⚠ Le client Prisma n'a pas été régénéré après la mise à jour.\n  Arrête le serveur, lance : npx prisma generate  puis : npm run dev\n");

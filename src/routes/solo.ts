@@ -5,6 +5,7 @@ import { z } from "zod";
 import { assertChapterUnlocked, requireMembership } from "../access.ts";
 import type { Deps } from "../auth.ts";
 import { HttpError } from "../http.ts";
+import { runningGameListeners } from "../runningGames.ts";
 import { loadEffectiveSettings } from "../settingsStore.ts";
 import { startOfDay } from "../time.ts";
 import { newBadgesSafe } from "../badges.ts";
@@ -56,6 +57,7 @@ type StaticGame = {
   qs: { id: string; position: number; question: { text: string; choices: string; answerIndex: number; explanation: string | null } }[];
 };
 const gameCache = new Map<string, StaticGame>();
+runningGameListeners.push(() => gameCache.clear());
 const GAME_TTL_MS = 30 * 60_000;
 function rememberGame(gameId: string, subjectId: string, cfg: GameConfig, userId: string, all: { id: string; position: number; question: { text: string; choices: string; answerIndex: number; explanation: string | null } }[]) {
   if (gameCache.size > 500) for (const [k, v] of gameCache) if (Date.now() - v.at > GAME_TTL_MS) gameCache.delete(k);

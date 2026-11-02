@@ -1,4 +1,4 @@
-import { h, mount, post, fail, toast, confetti, errorMessage, avatarEl, icon } from "./lib.js";
+import { h, mount, fail, toast, confetti, avatarEl } from "./lib.js";
 import { S, lvl, activeSubject } from "./state.js";
 
 const C = 2 * Math.PI * 26;
@@ -24,7 +24,7 @@ export function versusBar(you, opponent, { scores, mid } = {}) {
 export function playStage(opts) {
   const root = h("div.stage");
   let tick = null;
-  let streak = 0, gained = 0, servedPending = null;
+  let servedPending = null;
   const pips = Array.from({ length: opts.total }, () => "");
   const stop = () => { clearInterval(tick); tick = null; };
   const sub = activeSubject();
@@ -55,7 +55,7 @@ export function playStage(opts) {
     const pipEls = pips.map((st, i) => h("i", { class: i === pos ? "now" : st }));
     const feedback = h("div.fb-slot", { "aria-live": "polite" });
     const buttons = q.choices.map((c, i) =>
-      h("button.answer", { class: `c${i % 6}`, style: `--i:${i}`, onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span.txt", c), h("span.mark")));
+      h("button.answer", { onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span.txt", c), h("span.mark")));
     const timeBar = h("i");
 
     // ── En-tête : duel = deux joueurs face à face (chrono au centre) ; solo = ton niveau, ta série et le chrono.
@@ -68,8 +68,6 @@ export function playStage(opts) {
       hud = h("div.hud",
         h("div.hud-me", h("div.pav", avatarEl(me.avatar, S.catalog, 48)),
           h("div.pinfo", h("strong", `Niv. ${lvlNow.level}`), h("div.mini-xp", xpFill))),
-        h("div.hud-mid", streak >= 2 ? h("span.combo", icon("flame"), h("b", String(streak))) : null,
-          gained > 0 ? h("span.xp-total", `+${gained}`) : null),
         ring);
       hud.xpFill = xpFill;
     }
@@ -100,8 +98,6 @@ export function playStage(opts) {
       }
       pips[pos] = res.correct ? "ok" : "ko";
       pipEls[pos].className = res.correct ? "ok" : "ko";
-      streak = res.correct ? streak + 1 : 0;
-      gained += res.xpGained ?? 0;
       if (res.level) { lvlNow.level = lvl(res.level); lvlNow.into = res.level.xpIntoLevel ?? lvlNow.into; lvlNow.next = res.level.xpForNext ?? lvlNow.next; }
       if (hud.xpFill) hud.xpFill.style.width = `${Math.min(100, (lvlNow.into / Math.max(1, lvlNow.next)) * 100)}%`;
       buttons.forEach((b, k) => {
@@ -109,13 +105,11 @@ export function playStage(opts) {
         else if (k === i && !res.correct && !res.timedOut) { b.classList.add("wrong"); b.querySelector(".mark").textContent = "✕"; }
         else b.classList.add("dim");
       });
-      card.classList.add(res.correct ? "is-ok" : "is-ko");
       const last = !!(res.finished || res.roundDone);
       feedback.replaceChildren(h("div.feedback", { class: res.correct ? "ok" : "ko" },
         h("div.row.between",
-          h("div.verdict", { class: res.correct ? "ok" : "ko" }, res.timedOut ? "⏱ Temps écoulé" : res.correct ? "✓ Bonne réponse" : "✕ Raté"),
+          h("div.verdict", { class: res.correct ? "ok" : "ko" }, res.timedOut ? "Temps écoulé" : res.correct ? "Bonne réponse" : "Réponse incorrecte"),
           h("div.fb-right",
-            res.correct && streak >= 2 ? h("span.combo", icon("flame"), h("b", String(streak))) : null,
             res.xpGained ? h("span.xp-pop", `+${res.xpGained} XP`) : null)),
         res.explanation ? h("p.expl", res.explanation) : null,
         h("button.btn.primary.block", { onclick: () => next(res, last) }, last ? "Continuer" : "Suivante")));

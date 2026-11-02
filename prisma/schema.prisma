@@ -167,6 +167,8 @@ model GamePlayer {
   correctCount Int     @default(0)
   result       String? // WIN | DRAW | LOSS | FORFEIT (null en solo)
   xpEarned     Int     @default(0)
+  /// Partie retirée de l'historique par ce joueur (les statistiques et l'XP restent acquis).
+  hiddenAt     DateTime?
 
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

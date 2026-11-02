@@ -6,6 +6,8 @@ import type { Deps } from "../auth.ts";
 import { HttpError } from "../http.ts";
 import { assertCan } from "../permissions.ts";
 import { fakeVerify, hashPassword, verifyPassword } from "../password.ts";
+import { applyTimeToRunningGames } from "../runningGames.ts";
+import { invalidateSettings } from "../settingsStore.ts";
 import { applyPatch, mergeSettings, parseStoredSettings, SettingsPatchSchema } from "../settings.ts";
 
 const accessName = z
@@ -124,6 +126,7 @@ export function registerSubjectRoutes(app: FastifyInstance, { prisma, auth, limi
     }
 
     const updated = await prisma.subject.update({ where: { id: subject.id }, data });
+    if (body.settings && "timePerQuestionSec" in body.settings) await applyTimeToRunningGames(prisma, subject.id);
     await logAction(prisma, ctx.user.id, subject.id, "UPDATE_SUBJECT", { fields: Object.keys(body) });
     return {
       subject: { id: updated.id, name: updated.name, accessName: updated.accessName },
@@ -261,6 +264,8 @@ export function registerSubjectRoutes(app: FastifyInstance, { prisma, auth, limi
       }
       await logAction(tx, ctx.user.id, null, "UPDATE_GLOBAL_SETTINGS", { keys: Object.keys(patch) });
     });
+    invalidateSettings();
+    if ("timePerQuestionSec" in patch) await applyTimeToRunningGames(prisma, null);
     const stored = await globalSettings(prisma);
     return { overrides: stored, settings: mergeSettings(stored) };
   });

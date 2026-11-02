@@ -23,6 +23,7 @@ import { registerLibraryRoutes } from "./routes/library.ts";
 import { registerMemberRoutes } from "./routes/members.ts";
 import { registerProgressRoutes } from "./routes/progress.ts";
 import { registerSoloRoutes } from "./routes/solo.ts";
+import { registerHistoryRoutes } from "./routes/history.ts";
 import { registerSocialRoutes } from "./routes/social.ts";
 import { registerStatsRoutes } from "./routes/stats.ts";
 import { registerSubjectRoutes } from "./routes/subjects.ts";
@@ -102,6 +103,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   registerChapterRoutes(app, deps);
   registerImportRoutes(app, deps);
   registerSoloRoutes(app, deps);
+  registerHistoryRoutes(app, deps);
   const hub = new SocketHub();
   app.decorate("hub", hub);
   registerDuelAsyncRoutes(app, deps, hub);

@@ -351,3 +351,46 @@ test("tickets : parties restantes par type, illimité = null, un ticket part au 
   assert.equal((await call(env, null, "GET", `/api/subjects/${subjectId}/tickets`)).statusCode, 401);
   assert.equal((await call(env, (await register(env, "solo-tickets-dehors")).cookie, "GET", `/api/subjects/${subjectId}/tickets`)).statusCode, 403);
 });
+
+test("temps par question : le passage à 0 (illimité) s'applique aussi à la partie déjà en cours", async () => {
+  await setSettings({ soloQuestions: 5, soloGamesPerDay: 0, timePerQuestionSec: 20 });
+  const p = await player("solo-temps-live");
+  const g = (await start(p.cookie)).json();
+  assert.equal(g.question.timeLimitSec, 20);
+  await setSettings({ timePerQuestionSec: 0 });
+  const cur = (await call(env, p.cookie, "GET", `/api/solo/${g.game.id}/current`)).json();
+  assert.equal(cur.question.timeLimitSec, 0);
+  assert.equal(cur.question.remainingMs, null);
+  // Réglage global : même effet (la matière n'a plus de surcharge)
+  await setSettings({ timePerQuestionSec: null });
+  assert.equal((await call(env, admin, "PUT", "/api/settings", { timePerQuestionSec: 0 })).statusCode, 200);
+  assert.equal((await call(env, p.cookie, "GET", `/api/solo/${g.game.id}/current`)).json().question.timeLimitSec, 0);
+  await call(env, admin, "PUT", "/api/settings", { timePerQuestionSec: null });
+});
+
+test("historique : retirer une partie terminée, sans toucher aux statistiques ni à l'XP", async () => {
+  await setSettings({ soloQuestions: 3, soloGamesPerDay: 0, timePerQuestionSec: 30 });
+  const p = await player("solo-histo");
+  const g = (await start(p.cookie)).json();
+  assert.equal((await call(env, p.cookie, "DELETE", `/api/games/${g.game.id}`)).statusCode, 409); // en cours : refusé
+  let q = g.question;
+  for (let i = 0; i < 3; i++) {
+    const r = (await call(env, p.cookie, "POST", `/api/solo/${g.game.id}/answer`, { gameQuestionId: q.gameQuestionId, choiceIndex: await correctIndexOf(q.gameQuestionId) })).json();
+    q = r.next;
+    if (q) await call(env, p.cookie, "GET", `/api/solo/${g.game.id}/current`); // l'affichage de la question démarre son chrono
+  }
+  const h1 = (await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/solo/history`)).json();
+  assert.equal(h1.games.length, 1);
+  assert.equal(h1.games[0].correct, 3);
+  const xpBefore = (await env.prisma.membership.findFirstOrThrow({ where: { userId: p.id, subjectId } })).xp;
+
+  assert.equal((await call(env, p.cookie, "DELETE", `/api/games/${g.game.id}`)).statusCode, 200);
+  assert.equal((await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/solo/history`)).json().games.length, 0);
+  assert.equal((await env.prisma.membership.findFirstOrThrow({ where: { userId: p.id, subjectId } })).xp, xpBefore);
+  assert.equal(await env.prisma.game.count({ where: { id: g.game.id } }), 1); // la partie existe toujours (statistiques)
+
+  const other = await player("solo-histo-autre");
+  assert.equal((await call(env, other.cookie, "DELETE", `/api/games/${g.game.id}`)).statusCode, 404);
+  assert.equal((await call(env, p.cookie, "DELETE", `/api/subjects/${subjectId}/history?mode=nimporte`)).statusCode, 400);
+  assert.equal((await call(env, p.cookie, "DELETE", `/api/subjects/${subjectId}/history?mode=solo`)).statusCode, 200);
+});

@@ -1,4 +1,4 @@
-import { h, get, post, fail, icon, sheet, timeLeft, confetti, toast, chapStyle } from "../lib.js";
+import { h, get, post, del, fail, icon, sheet, timeLeft, confetti, toast, chapStyle } from "../lib.js";
 import { S, activeSubject, go, lvl, refreshSummary, loadCatalog } from "../state.js";
 import { playStage } from "../stage.js";
 import { challengeLive } from "../live.js";
@@ -26,12 +26,26 @@ export async function duelsView() {
       ? h("span.chip", { class: d.yourTurn ? "amber" : "" }, d.yourTurn ? "À toi" : `fin dans ${timeLeft(d.deadlineAt)}`)
       : h("span.chip", { class: RESULT[d.result]?.[1] ?? "" }, RESULT[d.result]?.[0] ?? "Terminé"));
   const section = (title, list) => list.length ? h("section.stack.tight", h("h2", title), h("div.list", list.map(row))) : null;
+  const doneRow = (d) => {
+    const r = h("div.item.hist", h("a.item-link", { href: `#/duels/${d.id}` }, initial(d.opponent.username),
+      h("div.grow", h("strong", d.opponent.username), h("div.muted.small", resultText(d)))),
+      h("span.chip", { class: RESULT[d.result]?.[1] ?? "" }, RESULT[d.result]?.[0] ?? "Terminé"),
+      h("button.btn.ghost.small.x", { "aria-label": "Supprimer ce duel de l'historique", onclick: async () => {
+        try { await del(`/api/games/${d.id}`); r.remove(); } catch (e) { fail(e); }
+      } }, "✕"));
+    return r;
+  };
+  const doneBox = done.length ? h("section.stack.tight", h("div.row.between", h("h2", "Terminés"),
+    h("button.btn.ghost.small", { onclick: async () => {
+      if (!confirm("Effacer tout l'historique des duels ? Tes statistiques et ton XP restent acquis.")) return;
+      try { await del(`/api/subjects/${sub.id}/history?mode=duel`); doneBox.remove(); } catch (e) { fail(e); }
+    } }, "Tout effacer")), h("div.list", done.slice(0, 15).map(doneRow))) : null;
 
   return h("div.stack",
     h("div.row.between", h("h1", "Duels"), h("a.btn.primary", { href: "#/duels/new" }, "Nouveau duel")),
     tix ? h("div.tickets-bar", ticketRow("duel", tix.duel.left, tix.duel.total, { big: true }), ticketRow("live", null, null, { big: true })) : null,
     duels.length === 0 ? h("div.empty", icon("duel"), h("a.btn.primary", { href: "#/duels/new" }, "Défier un camarade")) : null,
-    section("À ton tour", mine), section("En attente de l'adversaire", waiting), section("Terminés", done.slice(0, 15)));
+    section("À ton tour", mine), section("En attente de l'adversaire", waiting), doneBox);
 }
 function statusText(d) {
   const n = d.next;

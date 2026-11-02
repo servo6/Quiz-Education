@@ -1,13 +1,14 @@
-import { h, get, post, fail, icon, confetti, toast, chapStyle } from "../lib.js";
+import { h, get, post, del, fail, icon, confetti, toast, chapStyle } from "../lib.js";
 import { S, activeSubject, go, lvl, loadCatalog } from "../state.js";
 import { playStage } from "../stage.js";
 import { ticketRow, spendTicket } from "../tickets.js";
 
 export async function soloPickView() {
   const sub = activeSubject();
-  const [status, ch] = await Promise.all([
+  const [status, ch, hist] = await Promise.all([
     get(`/api/subjects/${sub.id}/solo/status`),
     get(`/api/subjects/${sub.id}/chapters`),
+    get(`/api/subjects/${sub.id}/solo/history`).catch(() => ({ games: [] })),
   ]);
   let chosen = null;
   const start = h("button.btn.primary.block", { disabled: true }, "Lancer la partie");
@@ -42,7 +43,32 @@ export async function soloPickView() {
     ch.chapters.length
       ? h("section.stack", h("h2", "Chapitre"), h("div.chapters", buttons))
       : h("div.empty", icon("help"), h("p", "Aucun chapitre")),
-    ch.chapters.length ? start : null);
+    ch.chapters.length ? start : null,
+    historyBlock(sub, hist.games));
+}
+
+const fmtDay = (d) => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+/** Historique des parties solo : chaque ligne s'ouvre sur son résultat, la croix la retire de l'historique. */
+function historyBlock(sub, games) {
+  if (!games.length) return null;
+  const list = h("div.list");
+  const box = h("section.stack.tight", h("div.row.between", h("h2", "Historique"),
+    h("button.btn.ghost.small", { onclick: async () => {
+      if (!confirm("Effacer tout l'historique solo ? Tes statistiques et ton XP restent acquis.")) return;
+      try { await del(`/api/subjects/${sub.id}/history?mode=solo`); box.remove(); } catch (e) { fail(e); }
+    } }, "Tout effacer")), list);
+  for (const g of games) {
+    const row = h("div.item.hist",
+      h("a.grow.hist-link", { href: `#/solo/result/${g.id}` },
+        h("strong", g.chapter?.name ?? "Solo"),
+        h("div.muted.small", `${fmtDay(g.at)}${g.status === "ABANDONED" ? " · abandonnée" : ""}`)),
+      h("span.chip", `${g.correct}/${g.total}`),
+      h("button.btn.ghost.small.x", { "aria-label": "Supprimer cette partie", onclick: async () => {
+        try { await del(`/api/games/${g.id}`); row.remove(); if (!list.children.length) box.remove(); } catch (e) { fail(e); }
+      } }, "✕"));
+    list.append(row);
+  }
+  return box;
 }
 
 export async function soloPlayView({ id }, ctx) {

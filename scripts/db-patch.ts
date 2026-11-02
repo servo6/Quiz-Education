@@ -21,6 +21,7 @@ const STEPS: string[] = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "QuestionServe_gameQuestionId_userId_key" ON "QuestionServe"("gameQuestionId", "userId")`,
   `ALTER TABLE "QuestionServe" ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE "GamePlayer" ADD COLUMN IF NOT EXISTS "hiddenAt" TIMESTAMP(3)`,
   `ALTER TABLE "Chapter" ADD COLUMN IF NOT EXISTS "color" TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE "Chapter" ADD COLUMN IF NOT EXISTS "locked" BOOLEAN NOT NULL DEFAULT false`,
   `CREATE TABLE IF NOT EXISTS "Friendship" (
