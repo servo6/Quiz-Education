@@ -16,7 +16,7 @@ function accountForm(submitLabel, onSubmit) {
   const p = h("input.input", { type: "password", required: true, minlength: 8, autocomplete: "new-password", "aria-label": "Mot de passe" });
   const em = h("input.input", { type: "email", required: true, maxlength: 120, autocapitalize: "none", "aria-label": "Adresse e-mail" });
   return h("form.stack.tight", { onsubmit: async (e) => { e.preventDefault(); try { await onSubmit(u.value.trim(), p.value, em.value.trim()); u.value = ""; p.value = ""; em.value = ""; } catch (ex) { fail(ex); } } },
-    h("div.field", h("label", "Pseudo"), u), h("div.field", h("label", "Adresse e-mail (un lien de vérification lui est envoyé ; 3 jours pour la vérifier)"), em), h("div.field", h("label", "Mot de passe (8 caractères minimum)"), p),
+    h("div.field", h("label", "Pseudo"), u), h("div.field", h("label", "Adresse e-mail"), em), h("div.field", h("label", "Mot de passe"), p),
     h("button.btn.primary", { type: "submit" }, submitLabel));
 }
 
@@ -44,7 +44,6 @@ export async function organisations() {
     };
     load();
     return h("div.stack", list, h("h3", "Créer un administrateur d'organisation"),
-      h("p.muted.small", "Un nouveau compte est créé : un joueur existant ne peut pas être promu."),
       accountForm("Créer le compte", async (username, password, email) => {
         await post(`/api/organizations/${o.id}/admins`, { username, email, password }); toast("Administrateur créé", "good"); load(); }));
   });
@@ -93,7 +92,6 @@ export async function matieres(loadAdminSubjects, chooseAdminSub) {
     };
     load();
     return h("div.stack", list, others, h("h3", "Créer un responsable"),
-      h("p.muted.small", "Un nouveau compte est créé : un joueur ne peut pas être promu responsable."),
       accountForm("Créer le compte", async (username, password, email) => { await post(`/api/subjects/${s.id}/managers`, { username, email, password }); toast("Responsable créé", "good"); load(); }));
   });
 
@@ -118,7 +116,7 @@ export async function matieres(loadAdminSubjects, chooseAdminSub) {
       organizations.length > 1 ? h("div.field", h("label", { for: "m-o" }, "Organisation"), org) : null,
       h("div.field", h("label", { for: "m-n" }, "Nom"), name),
       h("div.field", h("label", { for: "m-a" }, "Nom d'accès (donné aux joueurs)"), an),
-      h("div.field", h("label", { for: "m-p" }, "Mot de passe d'accès (8 caractères minimum)"), ap),
+      h("div.field", h("label", { for: "m-p" }, "Mot de passe d'accès"), ap),
       h("button.btn.primary", { type: "submit" }, "Créer la matière")) : h("p.muted", "Crée d'abord une organisation."));
 }
 
@@ -141,7 +139,7 @@ export async function joueurs() {
       h("div.row.wrap",
         m.banned ? h("button.btn.small", { onclick: act(async () => { if (!sure(`Rétablir le compte de ${m.username} ?`)) return; await post(`/api/users/${m.userId}/unban`, {}); toast("Compte rétabli", "good"); }) }, "Rétablir")
           : h("button.btn.small.danger", { onclick: act(async () => { if (!sure(`Suspendre ${m.username} ? Ses duels en cours seront perdus.`)) return; await post(`/api/users/${m.userId}/ban`, {}); toast("Compte suspendu", "good"); }) }, "Suspendre"),
-        h("button.btn.small", { onclick: act(async () => { const pw = prompt(`Nouveau mot de passe pour ${m.username} (8 caractères minimum) :`); if (!pw) return; await post(`/api/users/${m.userId}/reset-password`, { newPassword: pw }); toast("Mot de passe réinitialisé", "good"); }) }, "Mot de passe")))) : [h("p.muted", "Aucun joueur.")]));
+        h("button.btn.small", { onclick: act(async () => { const pw = prompt(`Nouveau mot de passe pour ${m.username} :`); if (!pw) return; await post(`/api/users/${m.userId}/reset-password`, { newPassword: pw }); toast("Mot de passe réinitialisé", "good"); }) }, "Mot de passe")))) : [h("p.muted", "Aucun joueur.")]));
   }
   sel.onchange = () => load().catch(fail);
   let t; q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => load().catch(fail), 200); });

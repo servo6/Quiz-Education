@@ -80,7 +80,6 @@ export async function statsPanel(sub) {
 
       h("section.card.stack",
         h("div.row.between.wrap", h("h2", `Joueurs (${rows.length})`), search),
-        h("p.muted.small", "Clique sur un joueur pour voir toutes ses statistiques. Clique sur un titre de colonne pour trier."),
         rows.length ? h("div.table-wrap", h("table.data",
           h("thead", h("tr", COLUMNS.map(([key, label, , num]) => h("th", { class: num ? "num" : "", "aria-sort": sort.key === key ? (sort.dir === 1 ? "ascending" : "descending") : null, tabindex: 0, onclick: () => { sort = { key, dir: sort.key === key ? -sort.dir : key === "username" ? 1 : -1 }; paint(); }, onkeydown: (e) => { if (e.key === "Enter") e.currentTarget.click(); } },
             label + (sort.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : ""))))),
@@ -92,7 +91,7 @@ export async function statsPanel(sub) {
       h("div.grid-2",
         h("section.card.stack", h("h2", "Difficulté par chapitre"),
           data.chapters.length ? hbars(data.chapters.map((c) => ({ label: c.name, value: c.accuracy, note: `${c.questions} question${c.questions > 1 ? "s" : ""} · ${c.answered} réponse${c.answered > 1 ? "s" : ""}` }))) : h("p.muted", "Aucun chapitre."),
-          h("p.muted.small", "Plus la barre est basse, plus le chapitre est difficile pour tes joueurs.")),
+          null),
         h("section.card.stack", h("h2", "Questions les plus ratées"),
           data.hardQuestions.length ? h("ol.stack.tight", { style: "padding-left:1.2em;margin:0" }, data.hardQuestions.map((q) => h("li", h("div", q.text), h("div.muted.small", `${q.chapter} · ${q.accuracy} % de réussite sur ${q.answered} réponses`))))
             : h("p.muted", "Il faut au moins 5 réponses à une question pour qu'elle apparaisse ici."))),
@@ -119,9 +118,8 @@ export async function chatPanel() {
   }
   function paint() {
     root.replaceChildren(h("section.card.stack",
-      h("div", h("h2", "Conservation des messages"), h("p.muted", "Les messages privés entre amis sont supprimés automatiquement une fois cette durée écoulée, pour toutes les matières. Un changement s'applique tout de suite : les messages plus anciens sont effacés.")),
-      h("div.seg", { role: "radiogroup", "aria-label": "Durée de conservation" }, cfg.choices.map((d) => h("button", { type: "button", role: "radio", "aria-checked": String(d === cfg.retentionDays), "aria-pressed": String(d === cfg.retentionDays), onclick: () => choose(d) }, LABELS[d] ?? `${d} jours`))),
-      h("p.muted.small", "La suppression est définitive. Les joueurs voient la durée en haut de chaque conversation.")));
+      h("div", h("h2", "Conservation des messages")),
+      h("div.seg", { role: "radiogroup", "aria-label": "Durée de conservation" }, cfg.choices.map((d) => h("button", { type: "button", role: "radio", "aria-checked": String(d === cfg.retentionDays), "aria-pressed": String(d === cfg.retentionDays), onclick: () => choose(d) }, LABELS[d] ?? `${d} jours`))),));
   }
   paint();
   return root;

@@ -24,14 +24,13 @@ export async function appearancePanel() {
     });
     root.replaceChildren(
       h("section.card.stack",
-        h("div", h("h2", "Thème de la plateforme"), h("p.muted", "S'applique à tous les joueurs et à cette interface d'administration. Le changement est immédiat.")),
+        h("div", h("h2", "Thème de la plateforme")),
         h("div.themes", THEMES.map((t) => themeCard(t, t.id === themeConfig.theme, async () => {
           try { await setPlatformTheme({ theme: t.id }); toast(`Thème « ${t.name} » appliqué`, "good"); paint(); } catch (ex) { fail(ex); }
         })))),
       h("section.card.stack",
         h("label.row", { for: "allow-choice", style: "gap:12px;cursor:pointer" }, toggle,
-          h("div", h("strong", "Autoriser chaque joueur à choisir son thème"),
-            h("div.muted.small", "Quand c'est activé, le choix de chaque joueur (dans son profil) remplace le thème de la plateforme pour lui seul."))))
+          h("div", h("strong", "Autoriser chaque joueur à choisir son thème"),)))
     );
   };
   paint();
@@ -46,7 +45,7 @@ export async function scopedAppearancePanel(scope, items, text) {
   async function paint() {
     const current = await platformThemeOf(scope, sel.value);
     body.replaceChildren(h("section.card.stack",
-      h("div", h("h2", text.title), h("p.muted", text.help)),
+      h("div", h("h2", text.title)),
       h("div.themes",
         themeCard({ id: themeConfig.theme, name: "Thème de la plateforme", desc: "Aucun thème particulier" }, !current, async () => {
           try { await setScopeTheme(scope, sel.value, null); toast("Thème de la plateforme rétabli", "good"); paint(); } catch (ex) { fail(ex); } }),

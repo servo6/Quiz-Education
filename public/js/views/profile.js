@@ -56,7 +56,7 @@ export function passwordSheet() {
       catch (ex) { fail(ex); }
     },
   }, h("div.field", h("label", { for: "cp" }, "Mot de passe actuel"), cur),
-    h("div.field", h("label", { for: "np" }, "Nouveau mot de passe (8 caractères minimum)"), nw),
+    h("div.field", h("label", { for: "np" }, "Nouveau mot de passe"), nw),
     h("button.btn.primary.block", { type: "submit" }, "Enregistrer")));
 }
 

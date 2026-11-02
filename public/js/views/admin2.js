@@ -42,7 +42,7 @@ export function editQuestion(q, chapters, chapterId, onSaved) {
       h("div.field", h("label", "Question"), text),
       h("div.field", h("label", "Choix (coche la bonne réponse)"), rows,
         choices.length < 6 ? h("button.btn.small", { type: "button", onclick: () => { choices.push(""); paint(); } }, "Ajouter un choix") : null),
-      h("div.field", h("label", "Explication (facultatif)"), expl),
+      h("div.field", h("label", "Explication"), expl),
       h("div.field", h("label", "Chapitre"), chap),
       h("button.btn.primary.block", { type: "submit" }, "Enregistrer"));
   });
@@ -82,8 +82,8 @@ export async function comptes() {
       !me && u.role !== "USER" && u.role !== "ADMIN" && !u.emailVerified && S.me.user.role === "ADMIN" ? h("button.btn.small", { onclick: act(async () => { const d = prompt(`Prolonger le délai de vérification de ${u.username} de combien de jours ? (1 à 90)`, "3"); if (!d) return; await post(`/api/users/${u.id}/extend-verification`, { days: Number(d) }); toast("Délai prolongé", "good"); }) }, "Prolonger") : null,
       me || u.role === "ADMIN" ? null : h("div.row.wrap",
         u.banned ? h("button.btn.small", { onclick: act(async () => { if (!confirm(`Rétablir le compte de ${u.username} ?`)) return; await post(`/api/users/${u.id}/unban`, {}); }) }, "Rétablir")
-          : h("button.btn.small.danger", { onclick: act(async () => { const reason = prompt(`Suspendre ${u.username} ? Ses duels en cours seront perdus. Motif (facultatif) :`); if (reason === null) return; await post(`/api/users/${u.id}/ban`, reason ? { reason } : {}); toast("Compte suspendu", "good"); }) }, "Suspendre"),
-        h("button.btn.small", { onclick: act(async () => { const pw = prompt(`Nouveau mot de passe pour ${u.username} (8 caractères minimum) :`); if (!pw) return; await post(`/api/users/${u.id}/reset-password`, { newPassword: pw }); toast("Mot de passe réinitialisé", "good"); }) }, "Mot de passe")));
+          : h("button.btn.small.danger", { onclick: act(async () => { const reason = prompt(`Suspendre ${u.username} ? Ses duels en cours seront perdus. Motif :`); if (reason === null) return; await post(`/api/users/${u.id}/ban`, reason ? { reason } : {}); toast("Compte suspendu", "good"); }) }, "Suspendre"),
+        h("button.btn.small", { onclick: act(async () => { const pw = prompt(`Nouveau mot de passe pour ${u.username} :`); if (!pw) return; await post(`/api/users/${u.id}/reset-password`, { newPassword: pw }); toast("Mot de passe réinitialisé", "good"); }) }, "Mot de passe")));
   }
   let t; q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => load().catch(fail), 250); });
   filter.onchange = () => load().catch(fail);
@@ -93,7 +93,6 @@ export async function comptes() {
       h("div.stats", stat("Comptes", ov.users.total), stat("Actifs sur 7 jours", ov.users.activeLast7Days), stat("Suspendus", ov.users.banned), stat("Matières", ov.subjects),
         stat("Chapitres", ov.chapters), stat("Questions", ov.questions), stat("Réponses données", ov.answers), stat("Parties aujourd'hui", ov.gamesToday))),
     h("section.card.stack", h("h2", "Sauvegarde"),
-      h("p.muted.small", "Télécharge toutes les données (comptes sans mots de passe, matières, questions, XP, badges…) dans un fichier JSON. Garde-le en lieu sûr."),
       h("button.btn", { onclick: async () => { try { const d = await get("/api/admin/export"); download(`sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, d); toast("Sauvegarde téléchargée", "good"); } catch (e) { fail(e); } } }, "Télécharger la sauvegarde")),
     h("section.stack.tight", h("h2", "Comptes"), q, filter, list, more));
 }
@@ -115,13 +114,13 @@ export async function titres(sub) {
       tiers.length > 1 ? h("button.btn.ghost.small", { onclick: () => { tiers.splice(i, 1); paint(); } }, "✕") : null)));
     paint();
     const note = scope === "subject" ? (r.source === "subject" ? "Cette matière a ses propres titres." : "Cette matière utilise les titres par défaut. Enregistrer crée ses titres à elle.") : (r.source === "default" ? "Titres d'origine, jamais modifiés." : "Titres personnalisés.");
-    box.replaceChildren(h("p.muted.small", note), h("div.row.small.muted", h("span.grow", "Titre"), h("span", { style: "width:84px" }, "Niveau min."), h("span", { style: "width:44px" }, "Couleur"), h("span", { style: "width:36px" })), rows,
+    box.replaceChildren(h("div.row.small.muted", h("span.grow", "Titre"), h("span", { style: "width:84px" }, "Niveau min."), h("span", { style: "width:44px" }, "Couleur"), h("span", { style: "width:36px" })), rows,
       h("div.row.wrap", h("button.btn", { onclick: () => { tiers.push({ name: "Nouveau titre", minLevel: Math.max(1, ...tiers.map((t) => t.minLevel)) + 5, color: "#9ca3af" }); paint(); } }, "Ajouter un titre"),
         h("button.btn.primary", { onclick: async () => { try { await put(scope === "global" ? "/api/tiers" : `/api/subjects/${sub.id}/tiers`, { tiers: tiers.map((t) => ({ name: t.name.trim(), minLevel: t.minLevel, color: t.color })) }); toast("Titres enregistrés", "good"); load(); } catch (e) { fail(e); } } }, "Enregistrer"),
         scope === "subject" && r.source === "subject" ? h("button.btn.ghost", { onclick: async () => { try { await del(`/api/subjects/${sub.id}/tiers`); toast("Titres par défaut rétablis", "good"); load(); } catch (e) { fail(e); } } }, "Revenir aux titres par défaut") : null));
   }
   await load();
-  return h("section.card.stack", h("h2", "Titres selon le niveau"), h("p.muted.small", "Le titre d'un joueur est celui du plus haut niveau minimum qu'il a atteint. Il faut un titre au niveau 1."), scopeSel, box);
+  return h("section.card.stack", h("h2", "Titres selon le niveau"), scopeSel, box);
 }
 
 // ───────── Badges ─────────
@@ -160,18 +159,16 @@ export async function avatars() {
     const asset = h("input.input", { value: it?.assetPath ?? "", placeholder: "ex. avatars/hat-wizard.svg" });
     const ut = h("select.input", Object.entries(UNLOCKS).map(([k, l]) => h("option", { value: k }, l))); ut.value = it?.unlockType ?? "FREE";
     const uv = h("input.input", { value: it?.unlockValue ?? "", placeholder: "niveau, code du badge ou nom du titre" });
-    const hint = h("p.muted.small");
-    const upd = () => { uv.hidden = ut.value === "FREE"; hint.textContent = { FREE: "", LEVEL: "Valeur : le niveau minimum (ex. 10).", BADGE: "Valeur : le code du badge (ex. wins_1).", TIER: "Valeur : le nom exact du titre (ex. Expert)." }[ut.value]; };
+    const upd = () => { uv.hidden = ut.value === "FREE"; uv.placeholder = { LEVEL: "Niveau minimum (ex. 10)", BADGE: "Code du badge (ex. wins_1)", TIER: "Nom du titre (ex. Expert)" }[ut.value] ?? ""; };
     ut.onchange = upd; upd();
     return h("form.stack", { onsubmit: async (e) => { e.preventDefault();
       const body = { category: cat.value, name: name.value.trim(), assetPath: asset.value.trim() || name.value.trim(), unlockType: ut.value, unlockValue: ut.value === "FREE" ? null : uv.value.trim() };
       try { if (it) await patch(`/api/avatar/items/${it.id}`, body); else await post("/api/avatar/items", body); toast("Objet enregistré", "good"); close(); rerender(); } catch (ex) { fail(ex); } } },
       h("div.field", h("label", "Catégorie"), cat), h("div.field", h("label", "Nom"), name), h("div.field", h("label", "Fichier image"), asset),
-      h("div.field", h("label", "Déblocage"), ut, uv, hint), h("button.btn.primary.block", { type: "submit" }, "Enregistrer"));
+      h("div.field", h("label", "Déblocage"), ut, uv), h("button.btn.primary.block", { type: "submit" }, "Enregistrer"));
   });
   return h("div.stack",
     h("div.row.between", h("h2", `Objets d'avatar (${r.items.length})`), h("button.btn.primary", { onclick: () => edit(null) }, "Nouvel objet")),
-    h("p.muted.small", "Pour un nouvel objet, mets son image (SVG ou PNG carré, de préférence transparent) dans le dossier public/avatars de ton projet, puis indique « avatars/nom-du-fichier.svg » dans « Fichier image ». L'image est affichée par-dessus l'avatar."),
     Object.entries(CATS).map(([k, label]) => { const list = r.items.filter((i) => i.category === k); return list.length ? h("section.stack.tight", h("h3", label),
       h("div.list", list.map((i) => h("div.item", h("div.grow", h("strong", i.name), h("div.muted.small", i.unlockType === "FREE" ? "Libre" : `${UNLOCKS[i.unlockType]} : ${i.unlockValue}`)),
         h("button.btn.small", { onclick: () => edit(i) }, "Modifier"),

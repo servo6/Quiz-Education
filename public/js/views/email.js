@@ -24,7 +24,7 @@ export function resetView(token) {
         box.replaceChildren(h("p", "Ton mot de passe a été modifié. Tu peux te connecter."), backBtn("Se connecter"));
       } catch (ex) { err.textContent = errorMessage(ex); err.hidden = false; }
     },
-  }, h("div.field", h("label", { for: "rp" }, "Nouveau mot de passe (8 caractères minimum)"), pw), err,
+  }, h("div.field", h("label", { for: "rp" }, "Nouveau mot de passe"), pw), err,
     h("button.btn.primary.block", { type: "submit" }, "Changer le mot de passe")));
   return page("Nouveau mot de passe", box);
 }
@@ -51,7 +51,6 @@ export function forgotSheet(prefill = "") {
         } catch (ex) { fail(ex); }
       },
     },
-      h("p.muted.small", "Indique ton pseudo ou ton adresse e-mail. Le lien est envoyé à l'adresse enregistrée sur le compte. Sans adresse e-mail, contacte la personne qui gère ton compte."),
       h("div.field", h("label", { for: "fg" }, "Pseudo ou adresse e-mail"), id),
       h("button.btn.primary.block", { type: "submit" }, "Envoyer le lien"));
   });
@@ -86,9 +85,7 @@ export function emailSection() {
   return h("section.stack.tight", h("h2", "Adresse e-mail"),
     h("div.card.stack.tight",
       h("div.row.wrap", h("strong", u.email ?? "Aucune adresse enregistrée"), status),
-      !u.email ? h("p.muted.small", "Ajoute une adresse pour pouvoir te connecter avec et réinitialiser ton mot de passe en cas d'oubli.") : null,
-      u.email && !u.emailVerified ? h("p.muted.small", "Clique sur le lien reçu par e-mail pour vérifier l'adresse (valable 24 h).") : null,
-      overdue ? h("p.error-box", `Vérifie ton adresse avant le ${fmtDate(u.verifyDeadline)}, sinon ton compte sera suspendu. Seul le super administrateur pourra alors prolonger ce délai.`) : null,
+      overdue ? h("span.chip.bad", `à vérifier avant le ${fmtDate(u.verifyDeadline)}`) : null,
       h("div.row.wrap",
         h("button.btn", { onclick: editSheet }, u.email ? "Changer l'adresse" : "Ajouter une adresse"),
         u.email && !u.emailVerified ? h("button.btn", { onclick: sendLink }, "Renvoyer le mail de vérification") : null,

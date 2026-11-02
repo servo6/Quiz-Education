@@ -193,7 +193,6 @@ function openSubjects() {
       }, h("div.grow", h("strong", s.name), h("div.muted.small", `Niveau ${s.level} · ${s.title?.name ?? ""}`)),
         s.id === S.me.user.activeSubjectId ? h("span.chip.good", "Active") : null))),
     h("h3", "Rejoindre une autre matière"),
-    h("p.muted.small", "Chaque matière a son propre nom d'accès et son mot de passe. Tu ne peux rejoindre que des matières de ton organisation."),
     joinForm(async () => { close(); await loadMe(); render(); })));
 }
 

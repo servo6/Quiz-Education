@@ -187,7 +187,6 @@ function importCardFor(sub, onDone) {
   }
   raw.addEventListener("input", () => { ok = false; commit.disabled = true; });
   const el = h("section.card.stack", h("h2", "Importer des questions"),
-    h("p.muted.small", 'Format : un tableau JSON. "answer" est la position de la bonne réponse (0 pour la première). "explanation" est facultatif.'),
     target, newName, newOpts, file, raw,
     h("label.row.small", strict, " Tout refuser s'il y a une seule erreur"),
     preview, h("div.row", check, commit));
@@ -263,7 +262,7 @@ async function reglages(sub, org) {
   const read = () => Object.fromEntries(Object.entries(LABELS).map(([k, [, type]]) => [k, type === "bool" ? inputs[k].checked : Number(inputs[k].value)]));
   return h("div.stack",
     h("form.card.stack", { onsubmit: async (e) => { e.preventDefault(); try { const now = read(); const changed = Object.fromEntries(Object.entries(now).filter(([k, v]) => v !== r.settings[k])); if (!Object.keys(changed).length) return toast("Aucun changement"); if (G) await put(base, changed); else await patch(`/api/subjects/${sub.id}`, { settings: changed }); toast("Réglages enregistrés", "good"); rerender(); } catch (ex) { fail(ex); } } },
-      h("h2", G ? (org ? `Réglages de « ${org.name} »` : "Réglages globaux") : "Réglages de la matière"), G ? h("p.muted.small", org ? "Valables pour toutes les matières de cette organisation, sauf celles qui ont leurs propres réglages." : "Valables pour toutes les matières, sauf celles qui ont leurs propres réglages.") : null, fields,
+      h("h2", G ? (org ? `Réglages de « ${org.name} »` : "Réglages globaux") : "Réglages de la matière"), fields,
       h("div.row.wrap", h("button.btn.primary", { type: "submit" }, "Enregistrer"),
         h("button.btn.ghost", { type: "button", onclick: async () => { if (!confirm("Revenir aux réglages par défaut pour cette matière ?")) return;
           try { const nul = Object.fromEntries(Object.keys(LABELS).map((k) => [k, null])); if (G) await put(base, nul); else await patch(`/api/subjects/${sub.id}`, { settings: nul }); toast("Réglages par défaut rétablis", "good"); rerender(); } catch (ex) { fail(ex); } } }, "Valeurs par défaut"))),
@@ -277,7 +276,7 @@ function accessForm(sub, current) {
     if (ap.value && !sure("Changer le mot de passe d'accès ? Les joueurs déjà inscrits ne sont pas exclus.")) return;
     const b = { accessName: an.value.trim() }; if (ap.value) b.accessPassword = ap.value;
     try { await patch(`/api/subjects/${sub.id}`, b); toast("Accès mis à jour", "good"); ap.value = ""; } catch (ex) { fail(ex); } } },
-    h("h2", "Accès des joueurs"), h("p.muted.small", "Les joueurs rejoignent la matière avec ce nom et ce mot de passe. Changer le mot de passe n'exclut personne déjà inscrit."),
+    h("h2", "Accès des joueurs"),
     h("div.field", h("label", { for: "acc-n" }, "Nom d'accès"), an), h("div.field", h("label", { for: "acc-p" }, "Nouveau mot de passe d'accès"), ap),
     h("button.btn", { type: "submit" }, "Mettre à jour"));
 }
