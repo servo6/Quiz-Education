@@ -1,19 +1,34 @@
-import { h, mount, post, fail, toast, confetti, errorMessage } from "./lib.js";
-import { lvl } from "./state.js";
+import { h, mount, post, fail, toast, confetti, errorMessage, avatarEl, icon } from "./lib.js";
+import { S, lvl, activeSubject } from "./state.js";
 
 const C = 2 * Math.PI * 26;
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
+/** Carte joueur : avatar, nom, niveau (et score en duel direct). `side` = "left" | "right". */
+export function playerCard(p, side, score) {
+  return h("div.pcard", { class: side },
+    h("div.pav", avatarEl(p?.avatar ?? null, S.catalog, 56)),
+    h("div.pinfo", h("strong", p?.username ?? "?"), h("span.plvl", `Niv. ${lvl(p?.level) ?? 1}`)),
+    score != null ? h("b.pscore", { "data-score": score }, String(score)) : null);
+}
+/** Les deux adversaires face à face : toi en haut à gauche, l'autre en haut à droite. */
+export function versusBar(you, opponent, { scores, mid } = {}) {
+  return h("div.versus", playerCard(you, "left", scores?.you), mid ?? h("span.vs-badge", "VS"), playerCard(opponent, "right", scores?.opponent));
+}
+
 /**
- * Écran de jeu partagé par le solo et les duels.
- * opts: { total, question, label, answer(gqId, idx) → réponse API, loadNext() → question | null,
- *         onDone(res), onQuit() }
+ * Écran de jeu partagé par le solo et les duels différés.
+ * opts: { total, question, label, versus?: {you, opponent}, answer(gqId, idx) → réponse API,
+ *         loadNext() → question | null, markServed?(q), onDone(res), onQuit() }
  */
 export function playStage(opts) {
   const root = h("div.stage");
   let tick = null;
+  let streak = 0, gained = 0, servedPending = null;
   const pips = Array.from({ length: opts.total }, () => "");
   const stop = () => { clearInterval(tick); tick = null; };
+  const sub = activeSubject();
+  const lvlNow = { level: sub?.level ?? 1, into: sub?.xpIntoLevel ?? 0, next: sub?.xpForNext ?? 100 };
 
   function show(q) {
     stop();
@@ -26,35 +41,54 @@ export function playStage(opts) {
 
     const num = h("b", unlimited ? "∞" : String(Math.ceil((deadline - Date.now()) / 1000)));
     const ring = h("div.timer", { role: "timer", "aria-label": "Temps restant" });
-    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const NS = "http://www.w3.org/2000/svg";
+    const s = document.createElementNS(NS, "svg");
     s.setAttribute("viewBox", "0 0 60 60");
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    const bg = document.createElementNS(NS, "circle");
     bg.setAttribute("class", "bg"); bg.setAttribute("cx", 30); bg.setAttribute("cy", 30); bg.setAttribute("r", 26);
-    const fgNs = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    fgNs.setAttribute("class", "fg"); fgNs.setAttribute("cx", 30); fgNs.setAttribute("cy", 30); fgNs.setAttribute("r", 26);
-    fgNs.setAttribute("stroke-dasharray", C); fgNs.setAttribute("stroke-dashoffset", 0);
-    s.append(bg, fgNs);
+    const fg = document.createElementNS(NS, "circle");
+    fg.setAttribute("class", "fg"); fg.setAttribute("cx", 30); fg.setAttribute("cy", 30); fg.setAttribute("r", 26);
+    fg.setAttribute("stroke-dasharray", C); fg.setAttribute("stroke-dashoffset", 0);
+    s.append(bg, fg);
     ring.append(s, num);
 
     const pipEls = pips.map((st, i) => h("i", { class: i === pos ? "now" : st }));
-    const feedback = h("div", { "aria-live": "polite" });
+    const feedback = h("div.fb-slot", { "aria-live": "polite" });
     const buttons = q.choices.map((c, i) =>
-      h("button.answer", { onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span", c)));
+      h("button.answer", { class: `c${i % 6}`, style: `--i:${i}`, onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span.txt", c), h("span.mark")));
+    const timeBar = h("i");
+
+    // ── En-tête : duel = deux joueurs face à face (chrono au centre) ; solo = ton niveau, ta série et le chrono.
+    let hud;
+    if (opts.versus) {
+      hud = versusBar(opts.versus.you, opts.versus.opponent, { mid: ring });
+    } else {
+      const me = { avatar: S.me?.user.avatar, username: S.me?.user.username, level: lvlNow.level };
+      const xpFill = h("i", { style: `width:${Math.min(100, (lvlNow.into / Math.max(1, lvlNow.next)) * 100)}%` });
+      hud = h("div.hud",
+        h("div.hud-me", h("div.pav", avatarEl(me.avatar, S.catalog, 48)),
+          h("div.pinfo", h("strong", `Niv. ${lvlNow.level}`), h("div.mini-xp", xpFill))),
+        h("div.hud-mid", streak >= 2 ? h("span.combo", icon("flame"), h("b", String(streak))) : null,
+          gained > 0 ? h("span.xp-total", `+${gained}`) : null),
+        ring);
+      hud.xpFill = xpFill;
+    }
 
     function paint() {
-      if (unlimited) { ring.classList.remove("low"); return; }
+      if (unlimited) { ring.classList.remove("low"); timeBar.style.width = "100%"; return; }
       const left = Math.max(0, deadline - Date.now());
       num.textContent = String(Math.ceil(left / 1000));
-      fgNs.setAttribute("stroke-dashoffset", String(C * (1 - Math.min(1, left / limit))));
+      fg.setAttribute("stroke-dashoffset", String(C * (1 - Math.min(1, left / limit))));
+      timeBar.style.width = `${Math.min(100, (left / limit) * 100)}%`;
       ring.classList.toggle("low", left < 5000);
       if (left <= 0 && !locked) submit(0, true);
     }
 
-    let servedPending = null;
     async function submit(i, timedOut = false) {
       if (locked) return;
       locked = true; stop();
       buttons.forEach((b) => (b.disabled = true));
+      buttons[i]?.classList.add("picked");
       let res;
       try {
         if (servedPending) await servedPending;
@@ -66,18 +100,25 @@ export function playStage(opts) {
       }
       pips[pos] = res.correct ? "ok" : "ko";
       pipEls[pos].className = res.correct ? "ok" : "ko";
+      streak = res.correct ? streak + 1 : 0;
+      gained += res.xpGained ?? 0;
+      if (res.level) { lvlNow.level = lvl(res.level); lvlNow.into = res.level.xpIntoLevel ?? lvlNow.into; lvlNow.next = res.level.xpForNext ?? lvlNow.next; }
+      if (hud.xpFill) hud.xpFill.style.width = `${Math.min(100, (lvlNow.into / Math.max(1, lvlNow.next)) * 100)}%`;
       buttons.forEach((b, k) => {
-        if (k === res.correctIndex) b.classList.add("correct");
-        else if (k === i && !res.correct && !res.timedOut) b.classList.add("wrong");
+        if (k === res.correctIndex) { b.classList.add("correct"); b.querySelector(".mark").textContent = "✓"; }
+        else if (k === i && !res.correct && !res.timedOut) { b.classList.add("wrong"); b.querySelector(".mark").textContent = "✕"; }
         else b.classList.add("dim");
       });
+      card.classList.add(res.correct ? "is-ok" : "is-ko");
       const last = !!(res.finished || res.roundDone);
-      feedback.replaceChildren(h("div.feedback",
+      feedback.replaceChildren(h("div.feedback", { class: res.correct ? "ok" : "ko" },
         h("div.row.between",
-          h("div.verdict", { class: res.correct ? "ok" : "ko" }, res.timedOut ? "Temps écoulé" : res.correct ? "Bonne réponse !" : "Raté"),
-          res.xpGained ? h("span.xp-pop", `+${res.xpGained} XP`) : null),
-        res.explanation ? h("p", res.explanation) : null,
-        h("button.btn.primary.block", { onclick: () => next(res, last) }, last ? "Continuer" : "Question suivante")));
+          h("div.verdict", { class: res.correct ? "ok" : "ko" }, res.timedOut ? "⏱ Temps écoulé" : res.correct ? "✓ Bonne réponse" : "✕ Raté"),
+          h("div.fb-right",
+            res.correct && streak >= 2 ? h("span.combo", icon("flame"), h("b", String(streak))) : null,
+            res.xpGained ? h("span.xp-pop", `+${res.xpGained} XP`) : null)),
+        res.explanation ? h("p.expl", res.explanation) : null,
+        h("button.btn.primary.block", { onclick: () => next(res, last) }, last ? "Continuer" : "Suivante")));
       feedback.querySelector("button")?.focus();
       if (res.leveledUp) { toast(`Niveau ${lvl(res.level)} atteint !`, "good"); confetti(); }
       for (const b of res.newBadges ?? []) toast(`Nouveau badge : ${b.name ?? b.code}`, "badge", 5200);
@@ -99,15 +140,17 @@ export function playStage(opts) {
       } catch (e) { fail(e); opts.onQuit(); }
     }
 
+    const card = h("div.q-card",
+      h("div.q-meta", h("span.q-num", `${pos + 1}`, h("small", ` / ${opts.total}`)), opts.label ? h("span.q-label", opts.label) : null),
+      h("h1.q-text", { tabindex: "-1" }, q.text),
+      unlimited ? null : h("div.time-bar", timeBar));
+
     mount(root, h("div.stage-inner",
       h("div.stage-top",
-        h("button.quit", { onclick: opts.onQuit }, "Quitter"),
-        h("div.pips", pipEls),
-        ring),
-      h("div.q-wrap",
-        h("div.q-meta", `${opts.label ? opts.label + " · " : ""}Question ${pos + 1} sur ${opts.total}`),
-        h("h1.q-text", { tabindex: "-1" }, q.text),
-        h("div.answers", buttons)),
+        h("button.quit", { onclick: opts.onQuit, "aria-label": "Quitter" }, "✕"),
+        h("div.pips", pipEls)),
+      hud,
+      h("div.q-wrap", card, h("div.answers", buttons)),
       feedback));
     root.querySelector(".q-text")?.focus({ preventScroll: true });
     paint();

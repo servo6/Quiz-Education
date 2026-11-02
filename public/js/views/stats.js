@@ -63,7 +63,7 @@ export async function playerStatsBody(load, { initialDays = 30 } = {}) {
           h("div.kpis", kpi(st.daysCurrent, "jours d'affilée"), kpi(st.daysLongest, "record (jours)"), kpi(st.correctCurrent, "bonnes réponses d'affilée"), kpi(st.correctLongest, "record (réponses)")),
           h("div.stack.tight", h("strong.small", "7 derniers jours"), week)),
         h("section.card.stack", h("h2", "Duels"),
-          du.played === 0 ? h("p.muted", "Aucun duel terminé pour l'instant. Défie un camarade pour voir ton bilan ici.") : h("div.stack",
+          du.played === 0 ? h("p.muted", "Aucun duel") : h("div.stack",
             donut({ segments: [{ label: "Victoires", value: du.wins, cls: "c-good" }, { label: "Égalités", value: du.draws, cls: "c-warn" }, { label: "Défaites", value: du.losses, cls: "c-bad" }], center: du.winRate == null ? "–" : `${Math.round(du.winRate)} %`, sub: "victoires" }),
             h("div.stack.tight", h("strong.small", "Derniers duels (du plus récent)"), h("div.form-chips", du.recent.map((r) => h("b", { class: r, title: r === "W" ? "Victoire" : r === "D" ? "Égalité" : "Défaite" }, r === "W" ? "V" : r === "D" ? "N" : "D")))),
             h("p.muted.small", `Meilleure série de victoires : ${du.bestWinRun} · en cours : ${du.currentWinRun}`)))),

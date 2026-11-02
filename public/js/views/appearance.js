@@ -41,7 +41,7 @@ export async function appearancePanel() {
 /** Profil d'un joueur : choix personnel du thème (si l'administrateur l'autorise). */
 export function personalThemeSection() {
   if (!themeConfig.allowUserChoice) {
-    return h("section.stack.tight", h("h2", "Apparence"), h("p.muted", "Le thème est choisi par l'administrateur de la plateforme."));
+    return h("section.stack.tight", h("h2", "Apparence"), null);
   }
   const box = h("div.themes");
   const paint = () => {
@@ -51,7 +51,7 @@ export function personalThemeSection() {
       ...THEMES.map((t) => themeCard(t, own === t.id, () => { setPersonalTheme(t.id); paint(); })));
   };
   paint();
-  return h("section.stack.tight", h("h2", "Apparence"), h("p.muted.small", "Ce choix ne s'applique qu'à toi, sur cet appareil."), box);
+  return h("section.stack.tight", h("h2", "Apparence"), box);
 }
 
 export { applyTheme };

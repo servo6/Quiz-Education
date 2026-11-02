@@ -37,7 +37,7 @@ export async function rankingView() {
     // Ordre classique d'un podium : 2e, 1er, 3e (les ex æquo gardent leur rang réel).
     const [p1, p2, p3] = [top[0], top[1], top[2]];
     list.replaceChildren(...[
-      r.players.length === 0 ? h("div.empty", icon("rank"), h("p", choice.period === "all" ? "Personne n'a encore de résultat dans cette matière." : "Personne n'a encore marqué sur cette période. Sois le premier !")) : null,
+      r.players.length === 0 ? h("div.empty", icon("rank"), h("p", "Aucun résultat")) : null,
       top.length ? h("section.card", h("div.podium", pod(p2, 2), pod(p1, 1), pod(p3, 3))) : null,
       rest.length ? h("div.list", rest.map((p) => h("button.item", { class: p.id === me ? "me" : "", onclick: () => open(p) },
         h("span.rank", String(p.rank)),

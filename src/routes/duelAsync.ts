@@ -66,7 +66,7 @@ const otherOf = (cfg: Cfg, userId: string) => (userId === cfg.challengerId ? cfg
 // ───────────── Chargement et état ─────────────
 
 const gameInclude = {
-  players: { include: { user: { select: { id: true, username: true } } } },
+  players: { include: { user: { select: { id: true, username: true, avatar: true } } } },
   rounds: {
     orderBy: { number: "asc" as const },
     include: {
@@ -545,7 +545,19 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
     const cfg = parseCfg(game.config);
     const next = nextFor(game, cfg, ctx.user.id);
     if (next.action !== "play") return { status: "NOTHING_TO_PLAY", next };
-    const current = await currentQuestion(prisma, game.id, next.round, ctx.user.id, cfg);
+    const oppId = otherOf(cfg, ctx.user.id);
+    const [current, members] = await Promise.all([
+      currentQuestion(prisma, game.id, next.round, ctx.user.id, cfg),
+      prisma.membership.findMany({ where: { subjectId: game.subjectId, userId: { in: [ctx.user.id, oppId] } }, select: { userId: true, xp: true } }),
+    ]);
+    const card = (uid: string) => {
+      const p = game.players.find((x) => x.userId === uid)!;
+      let avatar: unknown = null;
+      try { avatar = p.user.avatar ? JSON.parse(p.user.avatar) : null; } catch { /* avatar illisible : ignoré */ }
+      const xp = members.find((m) => m.userId === uid)?.xp ?? 0;
+      return { id: uid, username: p.user.username, avatar, level: levelFromXp(xp, { base: cfg.levelBase, exponent: cfg.levelExponent }).level };
+    };
+    if (current.status === "IN_PROGRESS") return { ...current, versus: { you: card(ctx.user.id), opponent: card(oppId) } };
     if (current.status === "ROUND_DONE") return { status: "ROUND_DONE", next: nextFor(await loadGame(prisma, ctx.user.id, game.id), cfg, ctx.user.id) };
     return current;
   });

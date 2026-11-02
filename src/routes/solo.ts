@@ -177,6 +177,26 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     };
   }
 
+  // ── Tickets : parties restantes par type (null = illimité). Le joueur les voit sous forme d'icônes, sans phrase.
+  app.get<{ Params: { id: string } }>("/api/subjects/:id/tickets", async (req) => {
+    const ctx = await auth(req);
+    await requireMembership(prisma, ctx.user.id, req.params.id, ctx.user.role);
+    const subject = await prisma.subject.findUnique({ where: { id: req.params.id } });
+    if (!subject) throw new HttpError(404, "subject_not_found", "Matière introuvable");
+    const settings = await loadEffectiveSettings(prisma, subject.settings);
+    const [solo, activeDuels] = await Promise.all([
+      dailyStatus(ctx.user.id, subject.id, settings.soloGamesPerDay),
+      settings.maxActiveDuels > 0
+        ? prisma.game.count({ where: { mode: "DUEL", subjectId: subject.id, status: "IN_PROGRESS", players: { some: { userId: ctx.user.id } } } })
+        : Promise.resolve(0),
+    ]);
+    return {
+      solo: { total: solo.limit || null, left: solo.limit ? solo.remaining : null, resume: solo.activeGameId },
+      duel: { total: settings.maxActiveDuels || null, left: settings.maxActiveDuels ? Math.max(0, settings.maxActiveDuels - activeDuels) : null },
+      live: { total: null, left: null },
+    };
+  });
+
   // ── État du jour : combien de parties restantes, partie en cours
   app.get<{ Params: { id: string } }>("/api/subjects/:id/solo/status", async (req) => {
     const ctx = await auth(req);

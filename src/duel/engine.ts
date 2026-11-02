@@ -392,8 +392,8 @@ export class DuelEngine {
       phase: game.phase,
       round: game.round,
       rounds: game.cfg.roundsPerDuel,
-      you: { id: me.userId, username: me.username, avatar: me.avatar },
-      opponent: { id: opp.userId, username: opp.username, avatar: opp.avatar, connected: opp.connected },
+      you: { id: me.userId, username: me.username, avatar: me.avatar, level: this.level(game, me.totalXp).level },
+      opponent: { id: opp.userId, username: opp.username, avatar: opp.avatar, connected: opp.connected, level: this.level(game, opp.totalXp).level },
       scores: { you: me.correct, opponent: opp.correct },
     };
     if (game.phase === "PICKING" && game.pick) return { ...base, pick: game.pick };
@@ -480,8 +480,8 @@ export class DuelEngine {
         rounds: cfg.roundsPerDuel,
         questionsPerRound: cfg.questionsPerRound,
         timePerQuestionSec: this.limitMs(game) / 1000,
-        you: { id: p.userId, username: p.username, avatar: p.avatar },
-        opponent: { id: opp.userId, username: opp.username, avatar: opp.avatar },
+        you: { id: p.userId, username: p.username, avatar: p.avatar, level: this.level(game, p.startXp).level },
+        opponent: { id: opp.userId, username: opp.username, avatar: opp.avatar, level: this.level(game, opp.startXp).level },
       });
     }
     game.lock.run(() => this.beginPicking(game, 1)).catch((e) => this.fail(game, e));

@@ -329,3 +329,25 @@ test("l'XP est propre à chaque matière", async () => {
   assert.equal(byName["Histoire"], 0);
   await call(env, p.cookie, "POST", `/api/solo/${s.game.id}/abandon`);
 });
+
+test("tickets : parties restantes par type, illimité = null, un ticket part au lancement", async () => {
+  await setSettings({ soloQuestions: 5, soloGamesPerDay: 3, maxActiveDuels: 4 });
+  const p = await player("solo-tickets");
+  const t0 = (await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/tickets`)).json();
+  assert.deepEqual(t0.solo, { total: 3, left: 3, resume: null });
+  assert.deepEqual(t0.duel, { total: 4, left: 4 });
+  assert.deepEqual(t0.live, { total: null, left: null });
+
+  const g = (await start(p.cookie)).json();
+  assert.equal((await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/tickets`)).json().solo.left, 2);
+  await start(p.cookie); // reprise : ne consomme rien
+  assert.equal((await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/tickets`)).json().solo.left, 2);
+  await call(env, p.cookie, "POST", `/api/solo/${g.game.id}/abandon`);
+
+  await setSettings({ soloGamesPerDay: 0, maxActiveDuels: 0 });
+  const t1 = (await call(env, p.cookie, "GET", `/api/subjects/${subjectId}/tickets`)).json();
+  assert.equal(t1.solo.total, null);
+  assert.equal(t1.duel.total, null);
+  assert.equal((await call(env, null, "GET", `/api/subjects/${subjectId}/tickets`)).statusCode, 401);
+  assert.equal((await call(env, (await register(env, "solo-tickets-dehors")).cookie, "GET", `/api/subjects/${subjectId}/tickets`)).statusCode, 403);
+});

@@ -1,12 +1,14 @@
 import { h, get, icon, svg, timeLeft } from "../lib.js";
 import { S, activeSubject, refreshSummary, loadCatalog } from "../state.js";
 import { avatarEl } from "../lib.js";
+import { ticketRow, loadTickets } from "../tickets.js";
 
 export async function homeView() {
   const sub = activeSubject();
-  const [cat, board] = await Promise.all([
+  const [cat, board, tix] = await Promise.all([
     loadCatalog().catch(() => []),
     get(`/api/subjects/${sub.id}/leaderboard?limit=1`).catch(() => null),
+    loadTickets(sub.id),
     refreshSummary(),
   ]);
   const sum = S.summary;
@@ -24,11 +26,11 @@ export async function homeView() {
         h("div.xptext", `Niveau ${sub.level} · ${sub.xpIntoLevel} / ${sub.xpForNext} XP`
           + (board?.you?.rank ? ` · ${board.you.rank}${board.you.rank === 1 ? "er" : "e"} sur ${board.totalPlayers}` : "")))),
     solo.length ? h("a.card.flat.row.between", { href: `#/solo/play/${solo[0].gameId}` },
-      h("div", h("strong", "Une partie solo t'attend"), h("div.muted.small", "Reprends là où tu t'es arrêté.")),
+      h("strong", "Partie en cours"),
       h("span.btn.primary.small", "Reprendre")) : null,
     h("div.modes",
-      h("a.mode.solo", { href: "#/solo" }, withArt(icon("play")), h("h2", "Solo"), h("small", "Choisis un chapitre et enchaîne les questions.")),
-      h("a.mode.duel", { href: "#/duels" }, withArt(icon("duel")), turn.length ? h("span.chip", `${turn.length} à ton tour`) : null, h("h2", "Duel"), h("small", "Défie un camarade de ta matière."))),
+      h("a.mode.solo", { href: "#/solo" }, withArt(icon("play")), h("h2", "Solo"), tix ? ticketRow("solo", tix.solo.left, tix.solo.total) : null),
+      h("a.mode.duel", { href: "#/duels" }, withArt(icon("duel")), turn.length ? h("span.chip", `${turn.length} à ton tour`) : null, h("h2", "Duel"), tix ? h("div.tickets-bar", ticketRow("duel", tix.duel.left, tix.duel.total), ticketRow("live", null, null)) : null)),
     turn.length ? h("section.stack.tight", h("h2", "À ton tour"),
       h("div.list", turn.map((d) => duelRow(d)))) : null);
 }

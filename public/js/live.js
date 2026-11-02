@@ -1,6 +1,7 @@
 // Duel en direct (Socket.IO) : superposition plein écran pilotée par les événements du serveur.
 import { h, mount, toast, confetti, svg } from "./lib.js";
-import { S, refreshSummary, loadMe, lvl } from "./state.js";
+import { S, refreshSummary, loadMe, lvl, loadCatalog } from "./state.js";
+import { versusBar } from "./stage.js";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 const C = 2 * Math.PI * 26;
@@ -33,6 +34,7 @@ export function initLive(sock) {
   on("duel:challenge_cancelled", () => { invite = null; toast("Le défi a été annulé"); render(); });
   on("duel:started", (p) => {
     waiting = null; invite = null;
+    loadCatalog().then(() => render()).catch(() => {});
     G = { gameId: p.gameId, you: p.you, opponent: p.opponent, rounds: p.rounds, round: 0, phase: "STARTING", scores: { you: 0, opponent: 0 }, oppConnected: true, timePerQuestionSec: p.timePerQuestionSec };
     render();
   });
@@ -66,9 +68,7 @@ function frame(...children) {
       G && G.phase !== "DONE" ? h("button.quit", { onclick: () => { if (confirm("Abandonner ce duel ? Ton adversaire sera déclaré vainqueur.")) socket.emit("duel:forfeit", { gameId: G.gameId }, () => {}); } }, "Abandonner") : null),
     ...children);
 }
-const scoreBar = () => h("div.vs", { style: "color:#fff" },
-  h("div", h("div", G.you.username ?? "Toi"), h("div.score", String(G.scores?.you ?? 0))), h("div", "–"),
-  h("div", h("div", G.opponent.username ?? "Adversaire"), h("div.score", String(G.scores?.opponent ?? 0))));
+const scoreBar = () => versusBar(G.you, G.opponent, { scores: { you: G.scores?.you ?? 0, opponent: G.scores?.opponent ?? 0 } });
 
 function render() {
   stopTick();
@@ -80,7 +80,7 @@ function render() {
     const cnt = h("span", String(left()));
     tick = setInterval(() => { cnt.textContent = String(left()); if (left() <= 0) { stopTick(); invite = null; render(); } }, 500);
     return mount(layer, h("div.stage-inner", h("div.stage-top", h("div.q-meta", "Duel en direct")),
-      h("div.q-wrap.center", h("h1.q-text", `${invite.from.username} te défie !`), h("p", "Duel en direct : vous jouez les mêmes questions en même temps."),
+      h("div.q-wrap.center", h("h1.q-text", `${invite.from.username} te défie !`), 
         h("p", "Temps pour répondre : ", cnt, " s")),
       h("div.stack",
         h("button.btn.primary.block", { onclick: () => { const id = invite.challengeId; socket.emit("duel:respond", { challengeId: id, accept: true }, (r) => { if (!r?.ok) { toast(r?.error?.message ?? "Impossible d'accepter", "bad"); invite = null; render(); } }); } }, "Accepter"),
@@ -96,7 +96,7 @@ function render() {
 }
 
 function renderGame() {
-  const banner = !G.oppConnected ? h("div.feedback", "Ton adversaire s'est déconnecté. Il a un court délai pour revenir, sinon tu gagnes par forfait.") : null;
+  const banner = !G.oppConnected ? h("div.feedback", "⚠ Adversaire déconnecté…") : null;
   if (G.phase === "DONE") return renderDone();
   if (G.phase === "PICKING" && G.pick) {
     const mine = G.pick.picker === S.me.user.id;

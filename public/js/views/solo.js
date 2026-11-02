@@ -1,6 +1,7 @@
 import { h, get, post, fail, icon, confetti, toast, chapStyle } from "../lib.js";
-import { S, activeSubject, go, lvl } from "../state.js";
+import { S, activeSubject, go, lvl, loadCatalog } from "../state.js";
 import { playStage } from "../stage.js";
+import { ticketRow, spendTicket } from "../tickets.js";
 
 export async function soloPickView() {
   const sub = activeSubject();
@@ -22,10 +23,12 @@ export async function soloPickView() {
     }, h("strong", c.name), h("span.muted.small", `${c.questionCount} question${c.questionCount > 1 ? "s" : ""}`));
     return b;
   });
+  const tix = ticketRow("solo", status.limit ? status.remaining : null, status.limit || null, { big: true });
   start.onclick = async () => {
     start.disabled = true;
     try {
       const r = await post("/api/solo/start", { subjectId: sub.id, chapterId: chosen.id });
+      if (!r.resumed) await spendTicket(tix); // le ticket part : −1
       go(`/solo/play/${r.game.id}`);
     } catch (e) { fail(e); start.disabled = false; }
   };
@@ -33,21 +36,17 @@ export async function soloPickView() {
   return h("div.stack",
     h("h1", "Partie solo"),
     status.activeGameId ? h("a.card.flat.row.between", { href: `#/solo/play/${status.activeGameId}` },
-      h("div", h("strong", "Partie en cours"), h("div.muted.small", "Reprends-la avant d'en lancer une autre.")),
+      h("strong", "Partie en cours"),
       h("span.btn.primary.small", "Reprendre")) : null,
-    h("p.muted", status.limit
-      ? `${status.played} partie${status.played > 1 ? "s" : ""} jouée${status.played > 1 ? "s" : ""} aujourd'hui sur ${status.limit}. ${status.questionsPerGame} questions par partie.`
-      : `${status.questionsPerGame} questions par partie.`),
+    h("div.tickets-bar", tix),
     ch.chapters.length
-      ? h("section.stack", h("h2", "Choisis un chapitre"), h("div.chapters", buttons))
-      : h("div.empty", icon("help"), h("p", "Cette matière n'a pas encore de chapitre. Reviens plus tard.")),
-    status.remaining <= 0 && !status.activeGameId && status.limit
-      ? h("p.error-box", "Tu as atteint ta limite de parties pour aujourd'hui. Reviens demain !") : null,
+      ? h("section.stack", h("h2", "Chapitre"), h("div.chapters", buttons))
+      : h("div.empty", icon("help"), h("p", "Aucun chapitre")),
     ch.chapters.length ? start : null);
 }
 
 export async function soloPlayView({ id }, ctx) {
-  const cur = await get(`/api/solo/${id}/current`);
+  const [cur] = await Promise.all([get(`/api/solo/${id}/current`), loadCatalog().catch(() => null)]);
   if (cur.status !== "IN_PROGRESS" || !cur.question) { go(`/solo/result/${id}`); return h("div"); }
   const { el, cleanup } = playStage({
     total: cur.question.total,

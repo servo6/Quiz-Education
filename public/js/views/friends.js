@@ -54,7 +54,7 @@ export async function friendsView() {
           h("div.grow", h("strong", f.user.username, f.online ? h("span.chip.good.dot", { style: "margin-left:8px" }, "en ligne") : null),
             h("div.muted.small", { style: "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%" }, f.last ? `${f.last.mine ? "Toi : " : ""}${f.last.body}` : "Aucun message pour l'instant")),
           f.unread ? h("span.unread", String(f.unread)) : null)))
-          : h("div.empty", icon("chat"), h("p", "Pas encore d'ami dans cette matière."), h("p.muted.small", "Invite un camarade ci-dessous. S'il accepte, vous pourrez discuter ici."))),
+          : h("div.empty", icon("chat"), h("p", "Aucun ami"))),
       data.outgoing.length ? h("section.stack.tight", h("h2", "Invitations envoyées"),
         h("div.list", data.outgoing.map((f) => h("div.item", avatarEl(f.user.avatar, cat, 40), h("div.grow", h("strong", f.user.username), h("div.muted.small", "en attente de réponse")),
           h("button.btn.ghost.small", { onclick: act(() => del(`/api/friendships/${f.id}`)) }, "Annuler"))))) : null,

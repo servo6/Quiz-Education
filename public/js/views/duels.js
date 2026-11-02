@@ -3,6 +3,7 @@ import { S, activeSubject, go, lvl, refreshSummary, loadCatalog } from "../state
 import { playStage } from "../stage.js";
 import { challengeLive } from "../live.js";
 import { avatarEl } from "../lib.js";
+import { ticketRow, spendTicket, loadTickets } from "../tickets.js";
 
 const initial = (name) => h("span.initial", (name ?? "?").slice(0, 1).toUpperCase());
 const RESULT = { WIN: ["Victoire", "good"], DRAW: ["Égalité", "amber"], LOSS: ["Défaite", "bad"], FORFEIT: ["Forfait", "bad"] };
@@ -10,7 +11,7 @@ const RESULT = { WIN: ["Victoire", "good"], DRAW: ["Égalité", "amber"], LOSS: 
 // ───────── Liste ─────────
 export async function duelsView() {
   const sub = activeSubject();
-  const { duels } = await get(`/api/subjects/${sub.id}/duels`);
+  const [{ duels }, tix] = await Promise.all([get(`/api/subjects/${sub.id}/duels`), loadTickets(sub.id)]);
   refreshSummary();
   const active = duels.filter((d) => d.status === "IN_PROGRESS");
   const mine = active.filter((d) => d.yourTurn);
@@ -28,7 +29,8 @@ export async function duelsView() {
 
   return h("div.stack",
     h("div.row.between", h("h1", "Duels"), h("a.btn.primary", { href: "#/duels/new" }, "Nouveau duel")),
-    duels.length === 0 ? h("div.empty", icon("duel"), h("p", "Aucun duel pour l'instant."), h("a.btn.primary", { href: "#/duels/new" }, "Défier un camarade")) : null,
+    tix ? h("div.tickets-bar", ticketRow("duel", tix.duel.left, tix.duel.total, { big: true }), ticketRow("live", null, null, { big: true })) : null,
+    duels.length === 0 ? h("div.empty", icon("duel"), h("a.btn.primary", { href: "#/duels/new" }, "Défier un camarade")) : null,
     section("À ton tour", mine), section("En attente de l'adversaire", waiting), section("Terminés", done.slice(0, 15)));
 }
 function statusText(d) {
@@ -42,10 +44,12 @@ function resultText(d) { return d.score.opponent == null ? "" : `${d.score.you} 
 // ───────── Nouveau duel ─────────
 export async function duelNewView() {
   const sub = activeSubject();
-  const [ch, pl] = await Promise.all([
+  const [ch, pl, tix] = await Promise.all([
     get(`/api/subjects/${sub.id}/chapters`),
     get(`/api/subjects/${sub.id}/players`),
+    loadTickets(sub.id),
   ]);
+  const tixDuel = tix ? ticketRow("duel", tix.duel.left, tix.duel.total, { big: true }) : null;
   const usable = ch.chapters.filter((c) => c.questionCount > 0);
   let chosen = null;
   const playersBox = h("div.list");
@@ -55,7 +59,7 @@ export async function duelNewView() {
 
   async function create(fn) {
     if (!chosen) return toast("Choisis d'abord un chapitre", "bad");
-    try { const r = await fn(); toast("Défi lancé !", "good"); go(`/duels/${r.duel.id}`); } catch (e) { fail(e); }
+    try { const r = await fn(); await spendTicket(tixDuel); go(`/duels/${r.duel.id}`); } catch (e) { fail(e); }
   }
   const buttons = usable.map((c) => {
     const b = h("button.chapter", { "aria-pressed": "false", style: chapStyle(c), onclick: () => {
@@ -71,18 +75,15 @@ export async function duelNewView() {
   }
   paint(pl.players);
   const online = pl.players.filter((p) => p.online && !p.busy);
-  const liveBox = h("section.card.stack", h("h2", "Choisis un joueur en ligne"),
-    h("p.muted.small", "Les deux joueurs sont connectés et reçoivent les mêmes questions en même temps. Le chapitre de chaque manche est choisi à tour de rôle. Aucun duel différé n'est créé."),
+  const liveBox = h("section.card.stack", h("div.row.between", h("h2", "En ligne"), ticketRow("live", null, null)),
     online.length ? h("div.list", online.map((p) => h("button.item", { onclick: () => challengeLive(sub.id, p) }, initial(p.username),
-      h("div.grow", h("strong", p.username), h("div.muted.small", `Niveau ${lvl(p.level)}`)), h("span.chip.good.dot", "en ligne")))) : h("p.muted", "Aucun joueur de ta matière n'est en ligne pour l'instant."));
+      h("div.grow", h("strong", p.username), h("div.muted.small", `Niveau ${lvl(p.level)}`)), h("span.chip.good.dot", "en ligne")))) : h("p.muted", "Personne en ligne"));
 
   // Deux modes distincts : le duel différé (chacun joue à son rythme) et le duel en direct (les deux en même temps).
   const deferred = h("div.stack",
-    h("p.muted.small", "Chacun joue ses manches quand il veut, avant la date limite. Rien n'exige que l'adversaire soit connecté."),
-    h("section.stack", h("h2", "1. Choisis le chapitre de la première manche"),
-      usable.length ? h("div.chapters", buttons) : h("p.muted", "Aucun chapitre ne contient de questions.")),
-    h("section.stack", h("h2", "2. Choisis ton adversaire"),
-      h("p.muted.small", "Le duel démarre tout de suite : tu joues la manche 1, puis ton adversaire joue à son rythme."),
+    h("section.stack", h("div.row.between", h("h2", "Chapitre"), tixDuel),
+      usable.length ? h("div.chapters", buttons) : h("p.muted", "Aucun chapitre jouable")),
+    h("section.stack", h("h2", "Adversaire"),
       random, q, playersBox));
   const live = h("div.stack", liveBox);
   const tabDeferred = h("button.btn", { type: "button", role: "tab", "aria-selected": "true" }, "Duel différé");
@@ -114,13 +115,13 @@ export async function duelDetailView({ id }) {
   if (n.action === "play") {
     action = h("a.btn.primary.block", { href: `#/duels/${id}/play` }, `Jouer la manche ${n.round}`);
   } else if (n.action === "pick") {
-    action = h("div.stack", h("strong", `À toi de choisir le chapitre de la manche ${n.round}`),
+    action = h("div.stack", h("h2", `Manche ${n.round}`),
       h("div.chapters", (d.chapters ?? []).filter((c) => c.questionCount > 0).map((c) =>
         h("button.chapter", { style: chapStyle(c), onclick: async () => {
           try { await post(`/api/duels/${id}/pick`, { chapterId: c.id }); go(`/duels/${id}/play`); } catch (e) { fail(e); }
         } }, h("strong", c.name), h("span.muted.small", `${c.questionCount} questions`)))));
   } else {
-    action = h("p.muted", `${duel.opponent.username} doit jouer. Tu seras prévenu quand ce sera ton tour.`);
+    action = h("p.muted", `⏳ ${duel.opponent.username}`);
   }
 
   return h("div.stack",
@@ -130,7 +131,7 @@ export async function duelDetailView({ id }) {
         h("div", initial(me), h("div", me)),
         h("div.score", `${duel.score.you} – ${duel.score.opponent ?? "?"}`),
         h("div", initial(duel.opponent.username), h("div", duel.opponent.username))),
-      h("div.center.muted.small", `Fin automatique dans ${timeLeft(duel.deadlineAt)} · le plus de bonnes réponses gagne`)),
+      h("div.center", h("span.chip", `⏳ ${timeLeft(duel.deadlineAt)}`))),
     h("section.card.stack", { class: n.action === "wait" ? "" : "state-play" }, action),
     h("section.stack.tight", h("h2", `Manches (${duel.rounds})`),
       h("div.rounds", Array.from({ length: duel.rounds }, (_, i) => {
@@ -148,11 +149,11 @@ export async function duelDetailView({ id }) {
 
 // ───────── Jouer une manche ─────────
 export async function duelPlayView({ id }, ctx) {
-  const cur = await get(`/api/duels/${id}/current`);
+  const [cur] = await Promise.all([get(`/api/duels/${id}/current`), loadCatalog().catch(() => null)]);
   if (cur.status !== "IN_PROGRESS") { go(`/duels/${id}`); return h("div"); }
   const total = cur.question.total;
   const { el, cleanup } = playStage({
-    total, question: cur.question, label: "Duel",
+    total, question: cur.question, label: "Duel", versus: cur.versus,
     answer: (gq, idx) => post(`/api/duels/${id}/answer`, { gameQuestionId: gq, choiceIndex: idx }),
     markServed: () => get(`/api/duels/${id}/current`),
     loadNext: async () => { const n = await get(`/api/duels/${id}/current`); return n.status === "IN_PROGRESS" ? n.question : null; },
