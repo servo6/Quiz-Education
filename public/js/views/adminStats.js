@@ -1,4 +1,4 @@
-import { h, get, put, icon, toast, fail, sheet, avatarEl } from "../lib.js";
+import { h, get, put, icon, toast, fail, sheet, avatarEl, rich } from "../lib.js";
 import { loadCatalog, lvl } from "../state.js";
 import { barChart, donut, fmtDay, hbars, kpi, lineChart } from "../charts.js";
 import { playerStatsBody } from "./stats.js";
@@ -93,7 +93,7 @@ export async function statsPanel(sub) {
           data.chapters.length ? hbars(data.chapters.map((c) => ({ label: c.name, value: c.accuracy, note: `${c.questions} question${c.questions > 1 ? "s" : ""} · ${c.answered} réponse${c.answered > 1 ? "s" : ""}` }))) : h("p.muted", "Aucun chapitre."),
           null),
         h("section.card.stack", h("h2", "Questions les plus ratées"),
-          data.hardQuestions.length ? h("ol.stack.tight", { style: "padding-left:1.2em;margin:0" }, data.hardQuestions.map((q) => h("li", h("div", q.text), h("div.muted.small", `${q.chapter} · ${q.accuracy} % de réussite sur ${q.answered} réponses`))))
+          data.hardQuestions.length ? h("ol.stack.tight", { style: "padding-left:1.2em;margin:0" }, data.hardQuestions.map((q) => h("li", h("div", rich(q.text)), h("div.muted.small", `${q.chapter} · ${q.accuracy} % de réussite sur ${q.answered} réponses`))))
             : h("p.muted", "Il faut au moins 5 réponses à une question pour qu'elle apparaisse ici."))),
 
       h("div.grid-2",

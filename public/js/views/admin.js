@@ -1,4 +1,4 @@
-import { h, mount, get, post, put, api, fail, toast, errorMessage, icon } from "../lib.js";
+import { h, mount, get, post, put, api, fail, toast, errorMessage, icon, rich } from "../lib.js";
 import { statsPanel, chatPanel } from "./adminStats.js";
 import { S, go, rerender } from "../state.js";
 import { editQuestion, comptes, titres, badges, avatars, download } from "./admin2.js";
@@ -131,12 +131,12 @@ async function questions(sub) {
           try { const r = await post(`/api/chapters/${c.id}/questions/delete-since`, { since: iso }); toast(`${r.deletedQuestions} questions supprimées`, "good"); refresh(); openChapter(c); } catch (e) { fail(e); } } }, "Supprimer"))),
       h("div.stack.tight", h("strong", `Questions (${qs.questions.length}${qs.nextCursor ? "+" : ""})`),
         qs.questions.length ? h("div.review", qs.questions.map((q) => h("div.review-item",
-          h("div.row.between", h("strong", q.question), h("div.row",
+          h("div.row.between", h("strong", rich(q.question)), h("div.row",
             h("button.btn.small", { onclick: async () => { const { chapters } = await get(`/api/subjects/${sub.id}/chapters`); editQuestion(q, chapters, c.id, () => { refresh(); openChapter(c); }); } }, "Modifier"),
             h("button.btn.small.danger", { onclick: async () => {
               if (!sure("Supprimer cette question ? Tu pourras la restaurer depuis la corbeille.")) return;
               try { await del(`/api/questions/${q.id}`); toast("Question supprimée", "good"); refresh(); openChapter(c); } catch (e) { fail(e); } } }, "Supprimer"))),
-          h("ul", q.choices.map((ch, i) => h("li", { class: i === q.answer ? "right" : "" }, ch, i === q.answer ? " ✓" : ""))),
+          h("ul", q.choices.map((ch, i) => h("li", { class: i === q.answer ? "right" : "" }, rich(ch), i === q.answer ? " ✓" : ""))),
           q.stats.answered ? h("div.muted.small", `Réussite ${q.stats.accuracy} % sur ${q.stats.answered} réponses`) : null))) : h("p.muted.small", "Aucune question."))));
   }
 
@@ -211,7 +211,7 @@ async function corbeille(sub) {
     empty ? h("div.empty", h("p", "La corbeille est vide.")) : null,
     t.chapters.length ? h("section.stack.tight", h("h2", "Chapitres supprimés"), t.chapters.map((c) => h("div.item", h("div.grow", h("strong", c.name), h("div.muted.small", `supprimé le ${fmt(c.deletedAt)} · ${c.questions} questions`)), act("Restaurer", `/api/chapters/${c.id}/restore`)))) : null,
     t.batches.length ? h("section.stack.tight", h("h2", "Imports annulés"), t.batches.map((b) => h("div.item", h("div.grow", h("strong", b.chapter.name), h("div.muted.small", `annulé le ${fmt(b.deletedAt)} · ${b.importedCount} questions`)), act("Restaurer", `/api/batches/${b.id}/restore`)))) : null,
-    t.questions.length ? h("section.stack.tight", h("h2", `Questions supprimées (${t.totalDeletedQuestions})`), t.questions.map((q) => h("div.item", h("div.grow", h("div", q.question), h("div.muted.small", `${q.chapter.name} · ${fmt(q.deletedAt)}`)), act("Restaurer", `/api/questions/${q.id}/restore`)))) : null,
+    t.questions.length ? h("section.stack.tight", h("h2", `Questions supprimées (${t.totalDeletedQuestions})`), t.questions.map((q) => h("div.item", h("div.grow", h("div", rich(q.question)), h("div.muted.small", `${q.chapter.name} · ${fmt(q.deletedAt)}`)), act("Restaurer", `/api/questions/${q.id}/restore`)))) : null,
     !empty ? h("button.btn.ghost.danger", { onclick: async () => { if (!confirm("Supprimer définitivement ce qui est dans la corbeille et n'a jamais été joué ?")) return;
       try { const r = await post(`/api/subjects/${sub.id}/trash/purge`, {}); toast("Corbeille purgée", "good"); rerender(); } catch (e) { fail(e); } } }, "Vider la corbeille") : null);
 }

@@ -579,3 +579,18 @@ h2 svg { width: 20px; height: 20px; vertical-align: -3px; margin-right: 4px; }
 .hist-link { flex-direction: column; align-items: flex-start; gap: 0; }
 .btn.x { min-height: 34px; padding: 4px 10px; color: var(--muted); }
 .btn.x:hover { color: var(--bad); }
+
+/* ───────── Symboles, indices, exposants et formules ─────────
+   Les polices du thème ne couvrent pas tous les symboles (₂ ⁻¹ ⇌ → ≥ √ π σ ν ‡…) : on ajoute des polices
+   mathématiques en secours, caractère par caractère, pour que rien ne s'affiche en « carré vide » ou décalé. */
+:root { --font-math: "Noto Sans Math", "Noto Sans Symbols 2", "STIX Two Math", "Cambria Math", "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans"; }
+body, .answer, .answer .txt { font-family: var(--font-body), var(--font-math); }
+h1, h2, h3, .q-text { font-family: var(--font-display), var(--font-math); }
+.q-text, .answer .txt, .expl, .review-item { white-space: pre-line; overflow-wrap: anywhere; }
+.q-text .katex, .answer .katex { letter-spacing: normal; }
+.math:not(.math-ok) { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; opacity: .85; }
+.math-block { display: block; text-align: center; margin: .35em 0; overflow-x: auto; overflow-y: hidden; }
+.math-block .katex-display { margin: 0; }
+.katex { font-size: 1.06em; text-indent: 0; }
+.rich-preview { border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+.rich-preview ul { margin: .4em 0 0; padding-left: 1.2em; }

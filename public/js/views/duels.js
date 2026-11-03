@@ -1,4 +1,4 @@
-import { h, get, post, del, fail, icon, sheet, timeLeft, confetti, toast, chapStyle } from "../lib.js";
+import { h, get, post, del, fail, icon, sheet, timeLeft, confetti, toast, chapStyle, rich } from "../lib.js";
 import { S, activeSubject, go, lvl, refreshSummary, loadCatalog } from "../state.js";
 import { playStage } from "../stage.js";
 import { challengeLive } from "../live.js";
@@ -207,11 +207,11 @@ export async function duelResultView({ id }) {
     h("div.review", r.review.map((q) =>
       h("div.review-item", { class: q.you?.correct ? "ok" : "ko" },
         h("div.muted.small", `Manche ${q.round} · ${q.chapter?.name ?? q.chapter ?? ""}`),
-        h("strong", q.text),
+        h("strong", rich(q.text)),
         h("ul", q.choices.map((c, i) => h("li", { class: i === q.correctIndex ? "right" : "" },
-          c, i === q.correctIndex ? " ✓" : "",
+          rich(c), i === q.correctIndex ? " ✓" : "",
           i === q.you?.choice ? " · toi" : "", i === q.opponent?.choice ? ` · ${opp}` : ""))),
-        q.explanation ? h("p.muted.small", q.explanation) : null))));
+        q.explanation ? h("p.muted.small", rich(q.explanation)) : null))));
 }
 
 async function rematch(id, sub) {

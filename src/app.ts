@@ -156,6 +156,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
         if (name === "sw.js") {
           res.header("Cache-Control", "no-cache");
           res.header("Service-Worker-Allowed", "/");
+        } else if (filePath.replace(/\\/g, "/").includes("/vendor/katex/")) {
+          // Bibliothèque de formules (fichiers fixes) : conservée une semaine par le navigateur.
+          res.header("Cache-Control", "public, max-age=604800");
         } else if (name === "manifest.webmanifest") {
           res.header("Content-Type", "application/manifest+json; charset=utf-8");
           res.header("Cache-Control", "no-cache");

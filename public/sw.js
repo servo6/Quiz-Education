@@ -2,7 +2,7 @@
    - Jamais de cache pour l'API ni pour le temps réel (/api, /socket.io) : les réponses sont toujours fraîches.
    - Pages et fichiers de l'interface : réseau d'abord (toujours à jour après un déploiement), cache en secours.
    - Hors connexion : une page d'information simple à la place de l'erreur du navigateur. */
-const VERSION = "qp-v1";
+const VERSION = "qp-v2";
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 const PRECACHE = ["/offline.html", "/icons/icon-192.png", "/icons/icon-512.png", "/manifest.webmanifest"];
@@ -19,7 +19,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-const isStatic = (p) => /^\/(css|js|icons)\//.test(p) || p === "/manifest.webmanifest";
+const isStatic = (p) => /^\/(css|js|icons|vendor)\//.test(p) || p === "/manifest.webmanifest";
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;

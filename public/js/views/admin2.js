@@ -1,4 +1,4 @@
-import { h, mount, get, post, put, api, fail, toast, sheet, errorMessage } from "../lib.js";
+import { h, mount, get, post, put, api, fail, toast, sheet, errorMessage, rich } from "../lib.js";
 import { S, loadMe, rerender } from "../state.js";
 
 const patch = (u, b) => api("PATCH", u, b);
@@ -22,13 +22,22 @@ export function editQuestion(q, chapters, chapterId, onSaved) {
     const rows = h("div.stack.tight");
     let choices = [...q.choices];
     const paint = () => rows.replaceChildren(...choices.map((c, i) => {
-      const inp = h("input.input", { value: c, "aria-label": `Choix ${i + 1}`, oninput: () => { choices[i] = inp.value; } });
+      const inp = h("input.input", { value: c, "aria-label": `Choix ${i + 1}`, oninput: () => { choices[i] = inp.value; updatePreview(); } });
       return h("div.row", h("input", { type: "radio", name: "ans", checked: answer === i, "aria-label": `Bonne réponse : choix ${i + 1}`, onchange: () => { answer = i; } }),
         h("div.grow", inp),
         choices.length > 2 ? h("button.btn.ghost.small", { type: "button", onclick: () => { choices.splice(i, 1); if (answer >= choices.length) answer = choices.length - 1; else if (answer > i) answer--; paint(); } }, "✕") : null);
     }));
     paint();
     const expl = h("textarea.input", { rows: 2, "aria-label": "Explication" }); expl.value = q.explanation ?? "";
+    // Aperçu : n'apparaît que si le texte contient une formule ($…$) ; les symboles Unicode (₂, ², →, ≥…) s'écrivent tels quels.
+    const preview = h("div.rich-preview", { hidden: true });
+    function updatePreview() {
+      const all = [text.value, ...choices, expl.value].join("\n");
+      preview.hidden = !/[$\\]/.test(all);
+      if (preview.hidden) return;
+      preview.replaceChildren(h("strong", rich(text.value)), h("ul", choices.map((c) => h("li", rich(c)))), expl.value ? h("p.muted.small", rich(expl.value)) : null);
+    }
+    text.addEventListener("input", updatePreview); expl.addEventListener("input", updatePreview); updatePreview();
     const chap = h("select.input", { "aria-label": "Chapitre" }, chapters.map((c) => h("option", { value: c.id }, c.name)));
     chap.value = chapterId;
     return h("form.stack", {
@@ -43,6 +52,8 @@ export function editQuestion(q, chapters, chapterId, onSaved) {
       h("div.field", h("label", "Choix (coche la bonne réponse)"), rows,
         choices.length < 6 ? h("button.btn.small", { type: "button", onclick: () => { choices.push(""); paint(); } }, "Ajouter un choix") : null),
       h("div.field", h("label", "Explication"), expl),
+      h("div.field", h("label", "Aperçu des formules"), preview),
+      h("p.muted.small", "Formules : $x^2 + 1$ · chimie : $\\ce{H2O}$ · un dollar seul : \\$"),
       h("div.field", h("label", "Chapitre"), chap),
       h("button.btn.primary.block", { type: "submit" }, "Enregistrer"));
   });

@@ -1,4 +1,4 @@
-import { h, get, post, del, fail, icon, confetti, toast, chapStyle } from "../lib.js";
+import { h, get, post, del, fail, icon, confetti, toast, chapStyle, rich } from "../lib.js";
 import { S, activeSubject, go, lvl, loadCatalog } from "../state.js";
 import { playStage } from "../stage.js";
 import { ticketRow, spendTicket } from "../tickets.js";
@@ -115,10 +115,10 @@ export async function soloResultView({ id }) {
 export function reviewList(items) {
   return h("div.review", items.map((q) =>
     h("div.review-item", { class: q.isCorrect ? "ok" : "ko" },
-      h("strong", `${q.position}. ${q.text}`),
+      h("strong", `${q.position}. `, rich(q.text)),
       h("ul", q.choices.map((c, i) =>
         h("li", { class: i === q.correctIndex ? "right" : "" },
-          c, i === q.correctIndex ? " ✓" : "", i === q.yourChoice && !q.isCorrect ? " (ta réponse)" : ""))),
+          rich(c), i === q.correctIndex ? " ✓" : "", i === q.yourChoice && !q.isCorrect ? " (ta réponse)" : ""))),
       q.timedOut ? h("div.muted.small", "Temps écoulé") : null,
-      q.explanation ? h("p.muted.small", q.explanation) : null)));
+      q.explanation ? h("p.muted.small", rich(q.explanation)) : null)));
 }

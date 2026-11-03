@@ -209,3 +209,81 @@ export function avatarEl(avatar, catalog, size = 48) {
   node.innerHTML = node.innerHTML.replaceAll('id="g"', `id="${uid}g"`).replaceAll('id="c"', `id="${uid}c"`).replaceAll('url(#g)', `url(#${uid}g)`).replaceAll('url(#c)', `url(#${uid}c)`);
   return node;
 }
+
+// ───────── Texte riche : formules LaTeX ($…$) et chimie ($\ce{H2O}$) ─────────
+// Les textes restent des textes (jamais d'HTML). Seuls les passages entre $…$, $$…$$, \(…\) ou \[…\]
+// sont rendus comme des formules par KaTeX, chargé seulement quand une page en contient.
+// Un dollar littéral s'écrit \$. Sans KaTeX (réseau coupé), la formule reste lisible en texte brut.
+
+function splitMath(s) {
+  const parts = []; let text = ""; let i = 0;
+  const flush = () => { if (text) { parts.push({ t: "text", v: text }); text = ""; } };
+  const findClose = (from, close) => {
+    for (let j = from; j < s.length; j++) {
+      if (s[j] === "\\" && close !== "\\)" && close !== "\\]") { j++; continue; }
+      if (s.startsWith(close, j)) return j;
+    }
+    return -1;
+  };
+  while (i < s.length) {
+    const c = s[i];
+    if (c === "\\" && s[i + 1] === "$") { text += "$"; i += 2; continue; }
+    let open = 0, close = "", block = false;
+    if (c === "$" && s[i + 1] === "$") { open = 2; close = "$$"; block = true; }
+    else if (c === "$") { open = 1; close = "$"; }
+    else if (c === "\\" && s[i + 1] === "(") { open = 2; close = "\\)"; }
+    else if (c === "\\" && s[i + 1] === "[") { open = 2; close = "\\]"; block = true; }
+    if (!open) { text += c; i++; continue; }
+    const end = findClose(i + open, close);
+    const body = end < 0 ? "" : s.slice(i + open, end);
+    // « 5 $ et 10 $ » n'est pas une formule : un $ simple ne s'ouvre pas sur un espace, ne se ferme pas après un espace ni avant un chiffre.
+    const plausible = end > i + open && (close !== "$" || (!/\s/.test(body[0]) && !/\s/.test(body[body.length - 1]) && !/\d/.test(s[end + 1] ?? "")));
+    if (!plausible) { text += c; i++; continue; }
+    flush();
+    parts.push({ t: "math", v: body.trim(), block });
+    i = end + close.length;
+  }
+  flush();
+  return parts;
+}
+
+let katexLoading = null;
+function loadKatex() {
+  if (window.katex) return Promise.resolve(true);
+  if (katexLoading) return katexLoading;
+  const script = (src) => new Promise((ok, ko) => {
+    const el = document.createElement("script");
+    el.src = src; el.onload = ok; el.onerror = ko; document.head.append(el);
+  });
+  const css = document.createElement("link");
+  css.rel = "stylesheet"; css.href = "/vendor/katex/katex.min.css"; document.head.append(css);
+  katexLoading = script("/vendor/katex/katex.min.js")
+    .then(() => script("/vendor/katex/mhchem.min.js").catch(() => {}))   // chimie : \ce{…}
+    .then(() => true, () => { katexLoading = null; return false; });
+  return katexLoading;
+}
+
+function drawMath(el) {
+  try {
+    window.katex.render(el.dataset.tex, el, { throwOnError: false, displayMode: el.classList.contains("math-block"), output: "htmlAndMathml", strict: "ignore", trust: false });
+    el.classList.add("math-ok");
+  } catch { /* on garde le texte brut */ }
+}
+
+/** rich("L'eau $\\ce{H2O}$ et $x^2$") → fragment à insérer dans le DOM (textes et formules). */
+export function rich(value) {
+  const s = value == null ? "" : String(value);
+  if (!/[$\\]/.test(s)) return document.createTextNode(s);
+  const frag = document.createDocumentFragment();
+  for (const p of splitMath(s)) {
+    if (p.t === "text") { frag.append(document.createTextNode(p.v)); continue; }
+    const el = document.createElement("span");
+    el.className = p.block ? "math math-block" : "math";
+    el.dataset.tex = p.v;
+    el.textContent = p.v;
+    frag.append(el);
+    if (window.katex) drawMath(el);
+    else loadKatex().then((ok) => { if (ok) drawMath(el); });
+  }
+  return frag;
+}

@@ -1,4 +1,4 @@
-import { h, mount, fail, toast, confetti, avatarEl } from "./lib.js";
+import { h, mount, fail, toast, confetti, avatarEl, rich } from "./lib.js";
 import { S, lvl, activeSubject } from "./state.js";
 
 const C = 2 * Math.PI * 26;
@@ -55,7 +55,7 @@ export function playStage(opts) {
     const pipEls = pips.map((st, i) => h("i", { class: i === pos ? "now" : st }));
     const feedback = h("div.fb-slot", { "aria-live": "polite" });
     const buttons = q.choices.map((c, i) =>
-      h("button.answer", { onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span.txt", c), h("span.mark")));
+      h("button.answer", { onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span.txt", rich(c)), h("span.mark")));
     const timeBar = h("i");
 
     // ── En-tête : duel = deux joueurs face à face (chrono au centre) ; solo = ton niveau, ta série et le chrono.
@@ -111,7 +111,7 @@ export function playStage(opts) {
           h("div.verdict", { class: res.correct ? "ok" : "ko" }, res.timedOut ? "Temps écoulé" : res.correct ? "Bonne réponse" : "Réponse incorrecte"),
           h("div.fb-right",
             res.xpGained ? h("span.xp-pop", `+${res.xpGained} XP`) : null)),
-        res.explanation ? h("p.expl", res.explanation) : null,
+        res.explanation ? h("p.expl", rich(res.explanation)) : null,
         h("button.btn.primary.block", { onclick: () => next(res, last) }, last ? "Continuer" : "Suivante")));
       feedback.querySelector("button")?.focus();
       if (res.leveledUp) { toast(`Niveau ${lvl(res.level)} atteint !`, "good"); confetti(); }
@@ -136,7 +136,7 @@ export function playStage(opts) {
 
     const card = h("div.q-card",
       h("div.q-meta", h("span.q-num", `${pos + 1}`, h("small", ` / ${opts.total}`)), opts.label ? h("span.q-label", opts.label) : null),
-      h("h1.q-text", { tabindex: "-1" }, q.text),
+      h("h1.q-text", { tabindex: "-1" }, rich(q.text)),
       unlimited ? null : h("div.time-bar", timeBar));
 
     mount(root, h("div.stage-inner",

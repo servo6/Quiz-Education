@@ -1,5 +1,5 @@
 // Duel en direct (Socket.IO) : superposition plein écran pilotée par les événements du serveur.
-import { h, mount, toast, confetti, svg } from "./lib.js";
+import { h, mount, toast, confetti, svg, rich } from "./lib.js";
 import { S, refreshSummary, loadMe, lvl, loadCatalog } from "./state.js";
 import { versusBar } from "./stage.js";
 
@@ -136,7 +136,7 @@ function renderQuestion(banner) {
       if (G.answered) return;
       G.answered = true; G.chosen = i; render();
       socket.emit("duel:answer", { gameId: G.gameId, gameQuestionId: q.gameQuestionId, choiceIndex: i }, (r) => { if (!r?.ok) { G.answered = false; G.chosen = null; toast(r?.error?.message ?? "Réponse refusée", "bad"); render(); } });
-    } }, h("span.tag", LETTERS[i] ?? i + 1), h("span", c));
+    } }, h("span.tag", LETTERS[i] ?? i + 1), h("span", rich(c)));
     if (rv) {
       if (i === rv.correctIndex) b.classList.add("correct");
       else if (i === rv.you.choiceIndex) b.classList.add("wrong");
@@ -150,12 +150,12 @@ function renderQuestion(banner) {
   const status = rv ? h("div.feedback",
     h("div.row.between", h("div.verdict", { class: rv.you.correct ? "ok" : "ko" }, rv.you.timedOut ? "Temps écoulé" : rv.you.correct ? "Bonne réponse !" : "Raté"), rv.you.xpGained ? h("span.xp-pop", `+${rv.you.xpGained} XP`) : null),
     h("div.small", rv.opponent.timedOut ? `${G.opponent.username} n'a pas répondu à temps.` : rv.opponent.correct ? `${G.opponent.username} a bon.` : `${G.opponent.username} s'est trompé.`),
-    rv.explanation ? h("p", rv.explanation) : null, h("p.small", { style: "opacity:.8" }, "Question suivante dans un instant…"))
+    rv.explanation ? h("p", rich(rv.explanation)) : null, h("p.small", { style: "opacity:.8" }, "Question suivante dans un instant…"))
     : h("div.feedback", G.answered ? (G.oppAnswered ? "Réponse envoyée…" : `Réponse envoyée. En attente de ${G.opponent.username}…`) : (G.oppAnswered ? `${G.opponent.username} a déjà répondu !` : "À toi de répondre !"));
   mount(layer, h("div.stage-inner",
     h("div.stage-top", h("div.q-meta", { style: "flex:1" }, `Duel en direct · manche ${q.round}/${G.rounds} · question ${q.indexInRound}/${q.questionsInRound}`),
       h("button.quit", { onclick: () => { if (confirm("Abandonner ce duel ? Ton adversaire sera déclaré vainqueur.")) socket.emit("duel:forfeit", { gameId: G.gameId }, () => {}); } }, "Abandonner"), ring),
-    h("div.q-wrap", scoreBar(), h("h1.q-text", q.text), h("div.answers", buttons)),
+    h("div.q-wrap", scoreBar(), h("h1.q-text", rich(q.text)), h("div.answers", buttons)),
     h("div.stack.tight", banner, status)));
 }
 
