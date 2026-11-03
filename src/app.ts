@@ -146,6 +146,22 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   app.get("/api/health", async () => ({ ok: true }));
 
   // Interface web : fichiers statiques + repli sur index.html pour les adresses internes de l'application.
-  if (serveStatic) await app.register(fastifyStatic, { root: staticDir!, wildcard: true });
+  if (serveStatic) {
+    await app.register(fastifyStatic, {
+      root: staticDir!,
+      wildcard: true,
+      setHeaders(res, filePath) {
+        const name = path.basename(filePath);
+        // Le service worker doit toujours être revérifié, pour que les mises à jour du site arrivent vite.
+        if (name === "sw.js") {
+          res.header("Cache-Control", "no-cache");
+          res.header("Service-Worker-Allowed", "/");
+        } else if (name === "manifest.webmanifest") {
+          res.header("Content-Type", "application/manifest+json; charset=utf-8");
+          res.header("Cache-Control", "no-cache");
+        }
+      },
+    });
+  }
   return app;
 }
