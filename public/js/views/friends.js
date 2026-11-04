@@ -41,7 +41,7 @@ export async function friendsView() {
   q.oninput = () => { clearTimeout(timer); timer = setTimeout(search, 250); };
 
   function paint() {
-    root.replaceChildren(
+    root.replaceChildren(...[
       h("div.row.between", h("h1", "Amis"), h("span.muted.small", `Messages effacés après ${retentionText(data.retentionDays)}`)),
       data.incoming.length ? h("section.stack.tight", h("h2", `Invitations reçues (${data.incoming.length})`),
         h("div.list", data.incoming.map((f) => h("div.item", avatarEl(f.user.avatar, cat, 44),
@@ -58,7 +58,7 @@ export async function friendsView() {
       data.outgoing.length ? h("section.stack.tight", h("h2", "Invitations envoyées"),
         h("div.list", data.outgoing.map((f) => h("div.item", avatarEl(f.user.avatar, cat, 40), h("div.grow", h("strong", f.user.username), h("div.muted.small", "en attente de réponse")),
           h("button.btn.ghost.small", { onclick: act(() => del(`/api/friendships/${f.id}`)) }, "Annuler"))))) : null,
-      h("section.stack.tight", h("h2", "Inviter un joueur"), q, results));
+      h("section.stack.tight", h("h2", "Inviter un joueur"), q, results)].filter(Boolean));
   }
   paint(); search();
   return root;

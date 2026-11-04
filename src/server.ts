@@ -53,6 +53,7 @@ const warm = () => Promise.all(Array.from({ length: 4 }, () => prisma.$queryRaw`
 await warm();
 setInterval(warm, 20_000).unref();
 
+const mailer = createMailer({ provider: env.MAIL_PROVIDER, apiKey: env.MAIL_API_KEY, from: env.MAIL_FROM, fromName: env.MAIL_FROM_NAME });
 const app = await buildApp({
   prisma,
   jwtSecret: env.JWT_SECRET,
@@ -62,8 +63,12 @@ const app = await buildApp({
   cache: true,
   staticDir: "public",
   appUrl: env.APP_URL,
-  mailer: createMailer({ provider: env.MAIL_PROVIDER, apiKey: env.MAIL_API_KEY, from: env.MAIL_FROM, fromName: env.MAIL_FROM_NAME }),
+  mailer,
 });
+
+if (!mailer.configured) {
+  console.warn(`⚠ Envoi d'e-mails désactivé (MAIL_PROVIDER="${env.MAIL_PROVIDER}", clé et expéditeur ${env.MAIL_API_KEY && env.MAIL_FROM ? "présents" : "manquants"}). Les e-mails de vérification et de mot de passe oublié ne partiront pas.`);
+}
 
 const orphans = await app.duels.recoverOrphans();
 if (orphans > 0) console.log(`${orphans} duel(s) interrompu(s) par le redémarrage marqué(s) comme abandonné(s).`);

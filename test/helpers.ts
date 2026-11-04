@@ -6,7 +6,7 @@ import pg from "pg";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { buildApp } from "../src/app.ts";
-import { createMailer, type Mail } from "../src/mailer.ts";
+import { createMailer, type Mail, type Mailer } from "../src/mailer.ts";
 import type { Timings } from "../src/duel/engine.ts";
 import { createPrisma } from "../src/db.ts";
 import { ensureAdmin } from "../src/bootstrap.ts";
@@ -31,7 +31,7 @@ function testDatabaseUrl(): string {
  * à la fin. Les tables réelles du schéma `public` ne sont jamais touchées.
  */
 export async function createTestEnv(
-  opts: { rateLimit?: boolean; registrationOpen?: boolean; duelTimings?: Partial<Timings> } = {},
+  opts: { rateLimit?: boolean; registrationOpen?: boolean; duelTimings?: Partial<Timings>; mailer?: Mailer } = {},
 ): Promise<TestEnv> {
   const url = testDatabaseUrl();
   const schema = `qt_${randomBytes(6).toString("hex")}`;
@@ -47,7 +47,7 @@ export async function createTestEnv(
   }
 
   const prisma = createPrisma(url, { schema, max: 3 });
-  const mailer = createMailer({ provider: "memory" });
+  const mailer = opts.mailer ?? createMailer({ provider: "memory" });
   const app = await buildApp({
     mailer,
     appUrl: "http://site.test",
@@ -60,7 +60,7 @@ export async function createTestEnv(
   return {
     app,
     prisma,
-    outbox: mailer.outbox!,
+    outbox: mailer.outbox ?? [],
     close: async () => {
       await app.close();
       await prisma.$disconnect();

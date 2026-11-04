@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { logAction } from "../audit.ts";
 import type { Deps } from "../auth.ts";
-import { consumeToken, normalizeEmail, sendResetMail, sendVerificationMail, verificationOverdue } from "../emailService.ts";
+import { consumeToken, deliver, normalizeEmail, sendResetMail, sendVerificationMail, verificationOverdue } from "../emailService.ts";
 import { HttpError } from "../http.ts";
 import { hashPassword, verifyPassword } from "../password.ts";
 
@@ -64,7 +64,13 @@ export function registerEmailRoutes(app: FastifyInstance, deps: Deps): void {
     } else if (user.emailVerifiedAt) {
       return { ok: true, verified: true, sent: false };
     }
-    await sendVerificationMail(deps, req, user, email);
+    try {
+      await sendVerificationMail(deps, req, user, email, user.role === "ADMIN");
+    } catch (e) {
+      // L'adresse est enregistrée : seul l'envoi a échoué. On le dit pour que la personne réessaie via « Renvoyer le lien ».
+      if (e instanceof HttpError) throw new HttpError(e.status, e.code, `Adresse enregistrée, mais ${e.message.charAt(0).toLowerCase()}${e.message.slice(1)}`);
+      throw e;
+    }
     return { ok: true, verified: false, sent: true };
   });
 
@@ -72,8 +78,31 @@ export function registerEmailRoutes(app: FastifyInstance, deps: Deps): void {
     const { user } = await auth(req);
     if (!user.email) throw new HttpError(400, "no_email", "Ajoute d'abord une adresse e-mail");
     if (user.emailVerifiedAt) return { ok: true, verified: true, sent: false };
-    await sendVerificationMail(deps, req, user, user.email);
+    await sendVerificationMail(deps, req, user, user.email, user.role === "ADMIN");
     return { ok: true, verified: false, sent: true };
+  });
+
+  // ── Diagnostic de l'envoi d'e-mails (super administrateur)
+  app.get("/api/admin/mail-status", async (req) => {
+    const { actor } = await auth(req);
+    if (actor.role !== "ADMIN") throw new HttpError(403, "forbidden", "Action non autorisée");
+    const m = deps.mailer;
+    return { provider: m.provider, configured: m.configured, ...m.state };
+  });
+
+  app.post("/api/admin/mail-test", { config: limit(5) }, async (req) => {
+    const { user, actor } = await auth(req);
+    if (actor.role !== "ADMIN") throw new HttpError(403, "forbidden", "Action non autorisée");
+    const { to } = z.object({ to: emailSchema.optional() }).parse(req.body ?? {});
+    const target = to ?? user.email;
+    if (!target) throw new HttpError(400, "no_email", "Ajoute d'abord une adresse e-mail à ton compte, ou indique le destinataire du test");
+    await deliver(deps, req, {
+      to: target,
+      subject: "Test d'envoi d'e-mails",
+      text: "Ce message confirme que l'envoi d'e-mails de la plateforme fonctionne.",
+      html: "<p>Ce message confirme que l'envoi d'e-mails de la plateforme fonctionne.</p>",
+    }, true);
+    return { ok: true, to: target, provider: deps.mailer.provider };
   });
 
   app.delete("/api/me/email", async (req) => {
