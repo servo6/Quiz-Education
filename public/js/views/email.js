@@ -82,6 +82,27 @@ export function emailSection() {
       h("div.field", h("label", { for: "emp" }, "Mot de passe actuel"), cp),
       h("button.btn.primary.block", { type: "submit" }, "Enregistrer et envoyer le lien"));
   });
+  const testSheet = () => sheet("Tester l'envoi d'e-mails", (close) => {
+    const info = h("p.muted", "Chargement…");
+    const to = h("input.input", { id: "mt", type: "email", maxlength: 120, placeholder: u.email ?? "adresse de test", value: u.email ?? "" });
+    const out = h("div", { role: "status" });
+    api("GET", "/api/admin/mail-status").then((m) => {
+      info.replaceChildren(`Fournisseur : ${m.provider} · ${m.configured ? "configuré" : "NON configuré (clé ou expéditeur manquant)"}`
+        + (m.lastOkAt ? ` · dernier envoi réussi le ${fmtDate(m.lastOkAt)}` : "")
+        + (m.lastError ? ` · dernière erreur (${fmtDate(m.lastError.at)}) : ${m.lastError.message}` : ""));
+    }, (ex) => info.replaceChildren(errorMessage(ex)));
+    return h("form.stack", {
+      onsubmit: async (e) => {
+        e.preventDefault();
+        out.className = ""; out.textContent = "Envoi en cours…";
+        try {
+          const r = await post("/api/admin/mail-test", to.value.trim() ? { to: to.value.trim() } : {});
+          out.className = "chip good"; out.textContent = `Mail de test envoyé à ${r.to}. Vérifie aussi les spams.`;
+        } catch (ex) { out.className = "error-box"; out.textContent = errorMessage(ex); }
+      },
+    }, info, h("div.field", h("label", { for: "mt" }, "Envoyer un mail de test à"), to), out,
+      h("button.btn.primary.block", { type: "submit" }, "Envoyer le test"));
+  });
   return h("section.stack.tight", h("h2", "Adresse e-mail"),
     h("div.card.stack.tight",
       h("div.row.wrap", h("strong", u.email ?? "Aucune adresse enregistrée"), status),
@@ -89,6 +110,7 @@ export function emailSection() {
       h("div.row.wrap",
         h("button.btn", { onclick: editSheet }, u.email ? "Changer l'adresse" : "Ajouter une adresse"),
         u.email && !u.emailVerified ? h("button.btn", { onclick: sendLink }, "Renvoyer le mail de vérification") : null,
+        u.role === "ADMIN" ? h("button.btn", { onclick: testSheet }, "Tester l'envoi d'e-mails") : null,
         u.email && !staff ? h("button.btn.ghost", { onclick: async () => {
           if (!confirm("Retirer l'adresse e-mail de ce compte ? Tu ne pourras plus réinitialiser ton mot de passe par e-mail.")) return;
           try { await api("DELETE", "/api/me/email"); await loadMe(); rerender(); } catch (ex) { fail(ex); }
