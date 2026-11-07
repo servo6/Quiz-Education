@@ -1,5 +1,5 @@
 // Duel en direct (Socket.IO) : superposition plein écran pilotée par les événements du serveur.
-import { h, mount, toast, confetti, svg, rich } from "./lib.js";
+import { h, mount, toast, confetti, svg, rich, avatarEl } from "./lib.js";
 import { S, refreshSummary, loadMe, lvl, loadCatalog } from "./state.js";
 import { versusBar } from "./stage.js";
 
@@ -141,15 +141,18 @@ function renderQuestion(banner) {
       if (i === rv.correctIndex) b.classList.add("correct");
       else if (i === rv.you.choiceIndex) b.classList.add("wrong");
       else b.classList.add("dim");
-      const marks = [i === rv.you.choiceIndex ? "toi" : null, i === rv.opponent.choiceIndex ? "adversaire" : null].filter(Boolean);
-      if (marks.length) b.append(h("span.small", { style: "margin-left:auto;opacity:.8" }, marks.join(" + ")));
+      // Le choix de l'adversaire est signalé par son avatar, sans dire s'il a bon ou faux : à toi de le déduire.
+      if (i === rv.opponent.choiceIndex) {
+        b.classList.add("has-opp");
+        b.append(h("span.opp-pin", { role: "img", "aria-label": `Choix de ${G.opponent.username}`, title: `Choix de ${G.opponent.username}` }, avatarEl(G.opponent.avatar ?? null, S.catalog, 30)));
+      }
     } else if (G.chosen === i) b.setAttribute("aria-pressed", "true");
     else if (G.answered) b.classList.add("dim");
     return b;
   });
   const status = rv ? h("div.feedback",
     h("div.row.between", h("div.verdict", { class: rv.you.correct ? "ok" : "ko" }, rv.you.timedOut ? "Temps écoulé" : rv.you.correct ? "Bonne réponse !" : "Raté"), rv.you.xpGained ? h("span.xp-pop", `+${rv.you.xpGained} XP`) : null),
-    h("div.small", rv.opponent.timedOut ? `${G.opponent.username} n'a pas répondu à temps.` : rv.opponent.correct ? `${G.opponent.username} a bon.` : `${G.opponent.username} s'est trompé.`),
+    rv.opponent.timedOut ? h("div.small", `${G.opponent.username} n'a pas répondu à temps.`) : null,
     rv.explanation ? h("p", rich(rv.explanation)) : null, h("p.small", { style: "opacity:.8" }, "Question suivante dans un instant…"))
     : h("div.feedback", G.answered ? (G.oppAnswered ? "Réponse envoyée…" : `Réponse envoyée. En attente de ${G.opponent.username}…`) : (G.oppAnswered ? `${G.opponent.username} a déjà répondu !` : "À toi de répondre !"));
   mount(layer, h("div.stage-inner",

@@ -616,3 +616,14 @@ h1, h2, h3, .q-text { font-family: var(--font-display), var(--font-math); }
 .av-lock { font-style: normal; font-size: .66rem; color: var(--muted); }
 .av-save { position: sticky; bottom: 0; }
 @media (prefers-reduced-motion: reduce) { .av-stage, .av-stage svg g { transition: none; } }
+
+
+/* ───── Duel en direct : avatar de l'adversaire sur le choix qu'il a fait ───── */
+.answer { position: relative; }
+.answer.has-opp { padding-right: 44px; }
+.opp-pin { position: absolute; top: -11px; right: 10px; width: 34px; height: 34px; border-radius: 50%; background: var(--stage-panel, #16171a); border: 2px solid var(--stage-text, #fff); box-shadow: 0 4px 10px rgba(0,0,0,.45); display: grid; place-items: center; line-height: 0; overflow: hidden; animation: oppPop .38s cubic-bezier(.2,1.5,.4,1) both; z-index: 2; }
+.opp-pin .avatar { display: block; background: none; }
+.answer.dim.has-opp { opacity: 1; }
+.answer.dim.has-opp > :not(.opp-pin) { opacity: .5; }
+@keyframes oppPop { from { transform: translateY(8px) scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .opp-pin { animation: none; } }
