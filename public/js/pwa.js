@@ -16,12 +16,12 @@
     set: function (v) { try { localStorage.setItem(KEY, v); } catch (e) { /* ignoré */ } }
   };
 
-  var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
-  if (standalone) return;
+  var standalone = (window.matchMedia && (matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches))
+    || window.navigator.standalone === true
+    || (document.referrer || "").indexOf("android-app://") === 0;
 
   var last = Number(store.get());
-  if (last && Date.now() - last < DAYS * 86400000) return;
-
+  var snoozed = !!window.qpNoBanner || (!!last && Date.now() - last < DAYS * 86400000);
   var ua = navigator.userAgent || "";
   var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   var deferred = null;
@@ -34,7 +34,7 @@
   }
 
   function show(text, actionLabel, onAction) {
-    if (banner) return;
+    if (banner || standalone || snoozed) return;
     banner = document.createElement("div");
     banner.setAttribute("role", "region");
     banner.setAttribute("aria-label", "Installer l'application");
@@ -72,22 +72,42 @@
     document.body.appendChild(banner);
   }
 
+  function notify() { try { window.dispatchEvent(new CustomEvent("qp:pwa")); } catch (e) { /* ignoré */ } }
+
+  /** Lance la fenêtre d'installation du navigateur (Android / Chrome). Renvoie « accepted », « dismissed » ou « unavailable ». */
+  function promptInstall() {
+    var p = deferred;
+    if (!p) return Promise.resolve("unavailable");
+    deferred = null; hide(false); notify();
+    p.prompt();
+    return (p.userChoice || Promise.resolve({ outcome: "dismissed" })).then(function (r) {
+      var out = r && r.outcome === "accepted" ? "accepted" : "dismissed";
+      if (out === "dismissed") store.set(String(Date.now()));
+      return out;
+    });
+  }
+
   window.addEventListener("beforeinstallprompt", function (e) {
     e.preventDefault();
     deferred = e;
+    notify();
     setTimeout(function () {
       if (!deferred) return;
-      show("Installe Quiz sur ton écran d'accueil pour l'ouvrir comme une application.", "Installer", function () {
-        var p = deferred; deferred = null; hide(false);
-        p.prompt();
-        if (p.userChoice) p.userChoice.then(function (r) { if (r && r.outcome === "dismissed") store.set(String(Date.now())); });
-      });
+      show("Installe Quiz sur ton écran d'accueil pour l'ouvrir comme une application.", "Installer", promptInstall);
     }, 4000);
   });
 
-  window.addEventListener("appinstalled", function () { deferred = null; hide(false); });
+  window.addEventListener("appinstalled", function () { deferred = null; hide(false); notify(); });
 
-  if (isIOS) {
+  /** État partagé avec les pages (Profil, page d'installation). */
+  window.qpPwa = {
+    standalone: standalone,
+    isIOS: isIOS,
+    canPrompt: function () { return !!deferred; },
+    prompt: promptInstall
+  };
+
+  if (isIOS && !standalone) {
     setTimeout(function () {
       show("Pour installer Quiz : touche Partager, puis « Sur l'écran d'accueil ».", null, null);
     }, 5000);

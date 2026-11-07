@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0c0e">
+  <title>Installer Quiz</title>
+  <meta name="description" content="Installe l'application Quiz sur ton téléphone : quiz de révision et duels en direct.">
+  <meta property="og:title" content="Quiz : installe l'application">
+  <meta property="og:description" content="Des quiz pour réviser et des duels en direct. Installe l'application sur ton téléphone.">
+  <meta property="og:image" content="/icons/icon-512.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --text:#15171c; --muted:#5d6370; --line:#dfe2e8; --accent:#4f5bd5; --on:#fff; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0b0c0e; --card:#16171a; --text:#e9eaed; --muted:#9a9ea9; --line:#26282d; --accent:#6670e0; } }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      display:flex; justify-content:center; padding:max(24px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom)); }
+    main { width:100%; max-width:440px; display:grid; gap:18px; align-content:start; }
+    header { text-align:center; display:grid; gap:8px; justify-items:center; padding-top:12px; }
+    header img { width:88px; height:88px; border-radius:20px; }
+    h1 { margin:0; font-size:1.7rem; }
+    p { margin:0; }
+    .muted { color:var(--muted); }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; display:grid; gap:12px; }
+    .btn { display:block; width:100%; text-align:center; font:inherit; font-weight:600; border:1px solid var(--line); border-radius:12px; padding:13px 16px;
+      background:var(--card); color:var(--text); cursor:pointer; text-decoration:none; }
+    .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--on); }
+    .btn:focus-visible { outline:3px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset:2px; }
+    ol { margin:0; padding-left:1.3em; display:grid; gap:8px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="/icons/icon-192.png" alt="" width="88" height="88">
+      <h1>Quiz</h1>
+      <p class="muted">Des quiz pour réviser et des duels en direct avec tes amis.</p>
+    </header>
+
+    <section class="card" id="done" hidden>
+      <p><strong>L'application est déjà installée.</strong></p>
+      <a class="btn primary" href="/">Ouvrir Quiz</a>
+    </section>
+
+    <section class="card" id="android" hidden>
+      <p><strong>Installer sur ce téléphone</strong></p>
+      <button class="btn primary" id="install" type="button">Installer l'application</button>
+      <p class="muted" id="hint" hidden>Si rien ne se passe : ouvre le menu de Chrome (les trois points) puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».</p>
+    </section>
+
+    <section class="card" id="ios" hidden>
+      <p><strong>Installer sur iPhone / iPad</strong></p>
+      <ol>
+        <li>Ouvre cette page dans <b>Safari</b>.</li>
+        <li>Touche le bouton <b>Partager</b> (le carré avec une flèche).</li>
+        <li>Choisis <b>« Sur l'écran d'accueil »</b>, puis <b>« Ajouter »</b>.</li>
+      </ol>
+      <p class="muted">Si tu ne vois pas l'option, tu es peut-être dans WhatsApp ou une autre application : copie le lien et colle-le dans Safari.</p>
+      <button class="btn" id="copy" type="button">Copier le lien</button>
+    </section>
+
+    <section class="card" id="other" hidden>
+      <p><strong>Installer l'application</strong></p>
+      <p class="muted">Dans le menu de ton navigateur, choisis « Installer l'application » ou « Ajouter à l'écran d'accueil ». Sur Android, utilise Chrome.</p>
+    </section>
+
+    <a class="btn" href="/">Utiliser le site sans installer</a>
+  </main>
+
+  <script>window.qpNoBanner = true;</script>
+  <script src="/js/pwa.js" defer></script>
+  <script>
+    (function () {
+      var $ = function (id) { return document.getElementById(id); };
+      var ua = navigator.userAgent || "";
+      var ios = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+      var android = /android/i.test(ua);
+
+      function paint() {
+        var p = window.qpPwa || { standalone: false, canPrompt: function () { return false; } };
+        $("done").hidden = !p.standalone;
+        $("ios").hidden = p.standalone || !ios;
+        $("android").hidden = p.standalone || ios || !(android || p.canPrompt());
+        $("other").hidden = p.standalone || ios || android || p.canPrompt();
+      }
+      window.addEventListener("load", paint);
+      window.addEventListener("qp:pwa", paint);
+
+      $("install").addEventListener("click", function () {
+        var p = window.qpPwa;
+        if (p && p.canPrompt()) p.prompt(); else $("hint").hidden = false;
+      });
+      $("copy").addEventListener("click", function () {
+        var done = function () { $("copy").textContent = "Lien copié"; };
+        if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(done, function () { window.prompt("Copie ce lien :", location.href); });
+        else window.prompt("Copie ce lien :", location.href);
+      });
+    })();
+  </script>
+</body>
+</html>

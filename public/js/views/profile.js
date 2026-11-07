@@ -2,6 +2,7 @@ import { h, get, post, put, fail, toast, sheet, avatarEl, pct } from "../lib.js"
 import { S, activeSubject, loadCatalog, loadMe, rerender } from "../state.js";
 import { personalThemeSection } from "./appearance.js";
 import { emailSection } from "./email.js";
+import { appSection } from "./appShare.js";
 
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
 const SKINS = ["#f8d9bd", "#f2c9a0", "#d9a273", "#b07a4f", "#8a5a38", "#5e3b24"];
@@ -39,6 +40,7 @@ export async function profileView() {
         h("span.ico", b.icon || "🏅"), h("strong", b.name),
         h("span.muted.small", b.earned ? b.description : `${Math.min(b.current ?? 0, b.threshold ?? 0)} / ${b.threshold ?? "?"}`))))),
     personalThemeSection(),
+    appSection(),
     emailSection(),
     h("section.stack.tight", h("h2", "Compte"),
       h("div.row.wrap",
@@ -105,6 +107,7 @@ export async function staffProfileView(logout) {
         h("div", h("strong", me.user.username), h("div.muted", ROLE_LABEL[me.user.role] ?? ""))),
       me.user.role !== "ADMIN" && orgs.length ? h("div.muted.small", `Organisation${orgs.length > 1 ? "s" : ""} : ${orgs.map((o) => o.name).join(", ")}`) : null,
       me.user.role === "SUBJECT_MANAGER" && me.subjects.length ? h("div.muted.small", `Matière${me.subjects.length > 1 ? "s" : ""} gérée${me.subjects.length > 1 ? "s" : ""} : ${me.subjects.map((s) => s.name).join(", ")}`) : null),
+    appSection(),
     emailSection(),
     h("section.stack.tight", h("h2", "Compte"),
       h("div.row.wrap",
