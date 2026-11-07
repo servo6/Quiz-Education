@@ -1,3 +1,4 @@
+import { drawAvatar } from "./avatar.js";
 // Outils communs : construction du DOM sans innerHTML (pas d'injection), appels API, notifications, avatar.
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -156,58 +157,9 @@ const icons = {
 };
 export const icon = (name) => svg(icons[name]);
 
-// ───────── Avatar (dessiné à partir des objets choisis) ─────────
-const SKIN = "#f2c9a0";
-const HAIR = "#3b2a1a";
+// ───────── Avatar : dessiné par /js/avatar.js (buste en SVG avec relief) ─────────
 export function avatarEl(avatar, catalog, size = 48) {
-  const byId = new Map((catalog || []).map((i) => [i.id, i]));
-  const BUILTIN = new Set(["Courts", "Longs", "Bouclés", "Crête", "Sourire", "Sérieux", "Lunettes rondes", "T-shirt", "Sweat", "Costume", "Blouse", "Aucune", "Soleil", "Aucun", "Casquette", "Couronne", "Bleu", "Vert", "Galaxie", "Simple", "Or", "Légende"]);
-  const IMG = /\.(svg|png|webp|jpe?g|gif)$/i;
-  // Objets ajoutés par l'administrateur : dessinés à partir de leur image (dossier public/avatars/...).
-  const custom = {};
-  for (const cat of ["hair", "face", "outfit", "glasses", "hat", "background", "frame"]) {
-    const it = byId.get(avatar?.items?.[cat]);
-    if (it && !BUILTIN.has(it.name) && IMG.test(it.assetPath || "")) custom[cat] = /^(https?:)?\//.test(it.assetPath) ? it.assetPath : "/" + it.assetPath;
-  }
-  const img = (cat) => (custom[cat] ? `<image href="${custom[cat].replace(/"/g, "")}" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid slice"/>` : "");
-  const pick = (cat) => (custom[cat] ? "__custom" : byId.get(avatar?.items?.[cat])?.name ?? null);
-  const skin = avatar?.colors?.skin || SKIN;
-  const hair = avatar?.colors?.hair || HAIR;
-  const bg = pick("background");
-  const bgFill = { Bleu: "#3b82f6", Vert: "#22b57a", Galaxie: "url(#g)" }[bg] ?? "#b9b4f5";
-  const outfit = pick("outfit");
-  const outfitFill = { "T-shirt": "#ff5d6c", Sweat: "#7a5cff", Costume: "#2b2a4a", Blouse: "#f4f6ff" }[outfit] ?? "#ff5d6c";
-  const hairShape = custom.hair ? "" : {
-    Courts: `<path d="M26 40c-1-16 9-22 24-22s25 6 24 22c-6-8-14-11-24-11s-18 3-24 11Z" fill="${hair}"/>`,
-    Longs: `<path d="M24 46c-3-22 7-30 26-30s29 8 26 30l-2 24-10-8V40H36v22l-10 8-2-24Z" fill="${hair}"/>`,
-    "Bouclés": `<g fill="${hair}"><circle cx="30" cy="34" r="9"/><circle cx="41" cy="26" r="10"/><circle cx="54" cy="24" r="10"/><circle cx="66" cy="29" r="9"/><circle cx="72" cy="40" r="7"/><circle cx="26" cy="44" r="6"/></g>`,
-    "Crête": `<path d="M44 12h12l2 26H42l2-26Z" fill="#ff5d6c"/>`,
-  }[pick("hair")] ?? `<path d="M27 42c0-14 9-20 23-20s23 6 23 20c-6-7-13-9-23-9s-17 2-23 9Z" fill="${hair}"/>`;
-  const mouth = pick("face") === "Sérieux" ? '<path d="M43 64h14" stroke="#5a3a2a" stroke-width="3" stroke-linecap="round"/>' : '<path d="M41 61c3 6 15 6 18 0" fill="none" stroke="#5a3a2a" stroke-width="3" stroke-linecap="round"/>';
-  const glasses = pick("glasses") === "Soleil" ? '<g fill="#1b1944"><rect x="31" y="46" width="17" height="11" rx="5"/><rect x="52" y="46" width="17" height="11" rx="5"/><rect x="47" y="49" width="6" height="3"/></g>'
-    : pick("face") === "Lunettes rondes" ? '<g fill="none" stroke="#1b1944" stroke-width="2.5"><circle cx="39" cy="52" r="8"/><circle cx="61" cy="52" r="8"/><path d="M47 52h6"/></g>' : "";
-  const eyes = glasses.includes("rect") ? "" : '<circle cx="39" cy="52" r="3" fill="#1b1944"/><circle cx="61" cy="52" r="3" fill="#1b1944"/>';
-  const hat = { Casquette: '<path d="M26 34c0-12 10-17 24-17s24 5 24 17H26Zm40 0h22c0 5-9 8-22 8v-8Z" fill="#12b3a2"/>', Couronne: '<path d="M30 28 34 10l11 12 5-14 5 14 11-12 4 18H30Z" fill="#ffb020" stroke="#d98f00" stroke-width="2" stroke-linejoin="round"/>' }[pick("hat")] ?? "";
-  const frame = pick("frame");
-  const frameStroke = { Simple: "#ffffff", Or: "#ffb020", "Légende": "#ec4899" }[frame];
-  const node = svg(`<svg xmlns="${SVG_NS}" viewBox="0 0 100 100" role="img" aria-label="Avatar">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a1b78"/><stop offset="1" stop-color="#c43b8f"/></linearGradient><clipPath id="c"><circle cx="50" cy="50" r="48"/></clipPath></defs>
-    <g clip-path="url(#c)"><rect width="100" height="100" fill="${bgFill}"/>${img("background")}
-      <path d="M12 100c0-18 16-26 38-26s38 8 38 26Z" fill="${outfitFill}"/>
-      <rect x="43" y="66" width="14" height="12" rx="5" fill="${skin}"/>
-      ${pick("hair") === "Longs" ? hairShape : ""}
-      <ellipse cx="50" cy="52" rx="23" ry="26" fill="${skin}"/>
-      ${pick("hair") === "Longs" ? "" : hairShape}
-      ${eyes}${glasses}${mouth}${hat}${img("outfit")}${img("hair")}${img("face")}${img("glasses")}${img("hat")}</g>
-    ${img("frame")}${frameStroke ? `<circle cx="50" cy="50" r="47" fill="none" stroke="${frameStroke}" stroke-width="4"/>` : ""}
-  </svg>`);
-  node.classList.add("avatar");
-  node.setAttribute("width", size);
-  node.setAttribute("height", size);
-  // Identifiants uniques (plusieurs avatars sur la même page).
-  const uid = "a" + Math.random().toString(36).slice(2, 8);
-  node.innerHTML = node.innerHTML.replaceAll('id="g"', `id="${uid}g"`).replaceAll('id="c"', `id="${uid}c"`).replaceAll('url(#g)', `url(#${uid}g)`).replaceAll('url(#c)', `url(#${uid}c)`);
-  return node;
+  return drawAvatar(avatar, catalog, size);
 }
 
 // ───────── Texte riche : formules LaTeX ($…$) et chimie ($\ce{H2O}$) ─────────

@@ -594,3 +594,25 @@ h1, h2, h3, .q-text { font-family: var(--font-display), var(--font-math); }
 .katex { font-size: 1.06em; text-indent: 0; }
 .rich-preview { border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
 .rich-preview ul { margin: .4em 0 0; padding-left: 1.2em; }
+
+
+/* ───── Éditeur d'avatar ───── */
+.av-editor { gap: 12px; }
+.av-top { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.av-stage { width: 168px; height: 168px; border-radius: 50%; transition: transform .18s ease-out; will-change: transform; box-shadow: 0 14px 30px rgba(0,0,0,.35); }
+.av-stage .avatar { display: block; background: none; }
+.av-stage svg g { transition: transform .18s ease-out; }
+.av-actions { display: grid; gap: 8px; }
+.av-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.av-tab { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 7px 14px; font-weight: 600; font-size: .88rem; cursor: pointer; }
+.av-tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.av-panel { display: grid; gap: 16px; }
+.av-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.av-tile { position: relative; display: grid; justify-items: center; gap: 4px; padding: 6px 4px 7px; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: var(--radius-sm); cursor: pointer; font-size: .74rem; line-height: 1.15; text-align: center; }
+.av-tile:hover:not([disabled]) { border-color: var(--accent); }
+.av-tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.av-tile[disabled] { opacity: .5; cursor: not-allowed; }
+.av-tile .avatar { border-radius: 10px; }
+.av-lock { font-style: normal; font-size: .66rem; color: var(--muted); }
+.av-save { position: sticky; bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .av-stage, .av-stage svg g { transition: none; } }

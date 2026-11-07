@@ -10,17 +10,37 @@ export const UNLOCK_TYPES = ["FREE", "LEVEL", "BADGE", "TIER"] as const;
 export interface AvatarData {
   items: Partial<Record<AvatarCategory, string>>; // catégorie → id d'objet
   colors: Record<string, string>; // ex. { skin: "#f2c9a0", hair: "#3b2a1a" }
+  look: Record<string, string>; // choix de forme de l'avatar détaillé : { face: "oval", hair: "waves", … }
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+export const LOOK_KEY = /^[a-z]{2,16}$/;
+export const LOOK_VALUE = /^[a-z0-9-]{1,24}$/;
+export const LOOK_MAX_KEYS = 30;
+
+/** Options de l'avatar détaillé réservées : « clé:valeur » → condition de déblocage (mêmes règles que les objets du catalogue). */
+export const LOOK_LOCKS: Record<string, { unlockType: string; unlockValue: string | null }> = {
+  "headwear:cap": { unlockType: "LEVEL", unlockValue: "3" },
+  "glasses:round": { unlockType: "LEVEL", unlockValue: "5" },
+  "headwear:headphones": { unlockType: "LEVEL", unlockValue: "6" },
+  "glasses:shades": { unlockType: "LEVEL", unlockValue: "8" },
+  "glasses:aviator": { unlockType: "LEVEL", unlockValue: "8" },
+  "hair:mohawk": { unlockType: "LEVEL", unlockValue: "10" },
+  "headwear:gradcap": { unlockType: "LEVEL", unlockValue: "12" },
+  "outfit:suit": { unlockType: "LEVEL", unlockValue: "15" },
+  "bg:aurora": { unlockType: "LEVEL", unlockValue: "20" },
+  "outfit:blouse": { unlockType: "TIER", unlockValue: "Expert" },
+  "headwear:crown": { unlockType: "BADGE", unlockValue: "wins_50" },
+};
 
 /** Lit l'avatar stocké ; tout ce qui est invalide est ignoré. */
 export function parseAvatar(json: string | null | undefined): AvatarData {
-  const out: AvatarData = { items: {}, colors: {} };
+  const out: AvatarData = { items: {}, colors: {}, look: {} };
   try {
-    const raw = JSON.parse(json || "{}") as { items?: Record<string, unknown>; colors?: Record<string, unknown> };
+    const raw = JSON.parse(json || "{}") as { items?: Record<string, unknown>; colors?: Record<string, unknown>; look?: Record<string, unknown> };
     for (const c of AVATAR_CATEGORIES) if (typeof raw.items?.[c] === "string") out.items[c] = raw.items[c] as string;
     for (const [k, v] of Object.entries(raw.colors ?? {})) if (typeof v === "string" && HEX.test(v)) out.colors[k] = v;
+    for (const [k, v] of Object.entries(raw.look ?? {}).slice(0, LOOK_MAX_KEYS)) if (LOOK_KEY.test(k) && typeof v === "string" && LOOK_VALUE.test(v)) out.look[k] = v;
   } catch {
     /* avatar vide */
   }
@@ -85,4 +105,14 @@ export function lockReason(item: { unlockType: string; unlockValue: string | nul
     default:
       return "Objet indisponible";
   }
+}
+
+/** Options de l'avatar détaillé encore verrouillées pour cet utilisateur : « clé:valeur » → raison. */
+export function lockedLook(ctx: UnlockContext): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, rule] of Object.entries(LOOK_LOCKS)) {
+    const reason = lockReason(rule, ctx);
+    if (reason) out[key] = reason;
+  }
+  return out;
 }

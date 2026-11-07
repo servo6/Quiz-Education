@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { requireMembership } from "../access.ts";
-import { AVATAR_CATEGORIES, lockReason, parseAvatar, unlockContext, UNLOCK_TYPES, type AvatarCategory } from "../avatar.ts";
+import { AVATAR_CATEGORIES, LOOK_KEY, LOOK_MAX_KEYS, LOOK_VALUE, lockedLook, lockReason, parseAvatar, unlockContext, UNLOCK_TYPES, type AvatarCategory } from "../avatar.ts";
 import { logAction } from "../audit.ts";
 import type { Deps } from "../auth.ts";
 import { BADGE_TYPES, evaluateBadges } from "../badges.ts";
@@ -38,6 +38,7 @@ const AvatarItemBody = z.object({
 const AvatarBody = z.object({
   items: z.record(z.enum(AVATAR_CATEGORIES), z.string().min(1).nullable()),
   colors: z.record(z.string().regex(/^[a-z]{2,20}$/), HEX).default({}),
+  look: z.record(z.string().regex(LOOK_KEY), z.string().regex(LOOK_VALUE)).refine((o) => Object.keys(o).length <= LOOK_MAX_KEYS, "trop de choix").default({}),
 });
 
 /** Niveau, titre et réglages d'une matière, calculés une fois pour toute une liste. */
@@ -153,6 +154,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
     const [items, unlock] = await Promise.all([prisma.avatarItem.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }), unlockContext(prisma, ctx.user.id)]);
     return {
       avatar: parseAvatar(ctx.user.avatar),
+      lookLocks: lockedLook(unlock),
       items: items.map((i) => {
         const reason = lockReason(i, unlock);
         return { ...i, unlocked: reason === null, lockReason: reason };
@@ -173,7 +175,12 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
       if (reason) throw new HttpError(403, "avatar_item_locked", reason, { itemId: id });
       items[category] = id;
     }
-    const avatar = { items, colors: body.colors };
+    const locks = lockedLook(unlock);
+    for (const [key, value] of Object.entries(body.look)) {
+      const reason = locks[`${key}:${value}`];
+      if (reason) throw new HttpError(403, "avatar_item_locked", reason, { itemId: `${key}:${value}` });
+    }
+    const avatar = { items, colors: body.colors, look: body.look };
     await prisma.user.update({ where: { id: ctx.user.id }, data: { avatar: JSON.stringify(avatar) } });
     return { avatar };
   });

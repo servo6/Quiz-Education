@@ -1,8 +1,9 @@
-import { h, get, post, put, fail, toast, sheet, avatarEl, pct } from "../lib.js";
+import { h, get, post, fail, toast, sheet, avatarEl, pct } from "../lib.js";
 import { S, activeSubject, loadCatalog, loadMe, rerender } from "../state.js";
 import { personalThemeSection } from "./appearance.js";
 import { emailSection } from "./email.js";
 import { appSection } from "./appShare.js";
+import { editAvatar } from "./avatarEditor.js";
 
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
 const SKINS = ["#f8d9bd", "#f2c9a0", "#d9a273", "#b07a4f", "#8a5a38", "#5e3b24"];
@@ -60,39 +61,6 @@ export function passwordSheet() {
   }, h("div.field", h("label", { for: "cp" }, "Mot de passe actuel"), cur),
     h("div.field", h("label", { for: "np" }, "Nouveau mot de passe"), nw),
     h("button.btn.primary.block", { type: "submit" }, "Enregistrer")));
-}
-
-async function editAvatar(_cat, done) {
-  const r = await get("/api/avatar/items").catch((e) => { fail(e); return null; });
-  if (!r) return;
-  const items = r.items;
-  const draft = { items: { ...(r.avatar?.items ?? {}) }, colors: { ...(r.avatar?.colors ?? {}) } };
-  sheet("Mon avatar", (close) => {
-    const preview = h("div.center");
-    const body = h("div.catalog");
-    const paint = () => {
-      preview.replaceChildren(avatarEl(draft, items, 120));
-      body.replaceChildren(
-        h("div.stack.tight", h("strong", "Teint"), h("div.row.wrap", SKINS.map((c) =>
-          h("button.swatch", { style: `background:${c}`, "aria-label": `Teint ${c}`, "aria-pressed": String(draft.colors.skin === c),
-            onclick: () => { draft.colors.skin = c; paint(); } })))),
-        ...Object.entries(CATS).map(([key, label]) => {
-          const list = items.filter((i) => i.category === key);
-          if (!list.length) return null;
-          return h("div.stack.tight", h("strong", label), h("div.opts", list.map((it) =>
-            h("button.opt", {
-              "aria-pressed": String(draft.items[key] === it.id), disabled: !it.unlocked,
-              title: it.unlocked ? it.name : it.lockReason,
-              onclick: () => { draft.items[key] = it.id; paint(); },
-            }, it.name, !it.unlocked ? h("span.small.muted", it.lockReason ?? "Verrouillé") : null))));
-        }));
-    };
-    paint();
-    return h("div.stack", preview, body,
-      h("button.btn.primary.block", { onclick: async () => {
-        try { await put("/api/me/avatar", draft); await loadMe(); S.catalog = null; toast("Avatar enregistré", "good"); close(); done(); } catch (e) { fail(e); }
-      } }, "Enregistrer"));
-  });
 }
 
 const ROLE_LABEL = { ADMIN: "Super administrateur", ORG_ADMIN: "Administrateur d'organisation", SUBJECT_MANAGER: "Responsable de matière" };

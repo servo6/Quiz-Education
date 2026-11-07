@@ -180,6 +180,33 @@ test("avatar : catalogue verrouillé, enregistrement, déblocage par niveau et p
   assert.equal((await save({ hat: item("Couronne").id })).statusCode, 200);
 });
 
+test("avatar détaillé : choix enregistrés, options réservées verrouillées puis débloquées", async () => {
+  const u = await player();
+  const save = (look: Record<string, string>, colors: Record<string, string> = {}) => call(env, u.cookie, "PUT", "/api/me/avatar", { items: {}, colors, look });
+  const cat = (await call(env, u.cookie, "GET", "/api/avatar/items")).json();
+  assert.match(cat.lookLocks["hair:mohawk"], /Niveau 10/);
+  assert.equal(cat.lookLocks["hair:waves"], undefined);
+
+  const look = { face: "heart", eyes: "cat", hair: "waves", beard: "none", outfit: "hoodie", bg: "studio" };
+  assert.equal((await save(look, { skin: "#a96e45", hair: "#2b1b12", bga: "#7c88e8" })).statusCode, 200);
+  const me = (await call(env, u.cookie, "GET", "/api/me")).json();
+  assert.deepEqual(me.user.avatar.look, look);
+  assert.equal(me.user.avatar.colors.hair, "#2b1b12");
+
+  assert.equal((await save({ hair: "mohawk" })).statusCode, 403);
+  assert.equal((await save({ outfit: "suit" })).statusCode, 403);
+  assert.equal((await save({ headwear: "crown" })).statusCode, 403);
+  assert.equal((await save({ "Hair": "waves" })).statusCode, 400); // clé invalide
+  assert.equal((await save({ hair: "<script>" })).statusCode, 400); // valeur invalide
+  assert.equal((await save({ hair: "waves" }, { eyes: "rouge" })).statusCode, 400); // couleur invalide
+
+  await setXp(u.id, 8000); // niveau 10
+  assert.equal((await save({ hair: "mohawk" })).statusCode, 200);
+  assert.equal((await save({ outfit: "suit" })).statusCode, 403); // niveau 15 requis
+  const cat2 = (await call(env, u.cookie, "GET", "/api/avatar/items")).json();
+  assert.equal(cat2.lookLocks["hair:mohawk"], undefined);
+});
+
 test("avatar : administration du catalogue", async () => {
   const u = await player();
   const body = { category: "hat", name: "Chapeau test", assetPath: "avatars/hat/test.svg", unlockType: "LEVEL", unlockValue: "2" };
