@@ -67,13 +67,16 @@ export async function ensureDefaultAvatarItems(prisma: PrismaClient): Promise<nu
 }
 
 export interface UnlockContext {
+  /** Comptes de gestion : toutes les personnalisations, sans condition. */
+  all?: boolean;
   maxLevel: number;
   badgeCodes: Set<string>;
   tiers: Array<{ name: string; minLevel: number }>;
 }
 
 /** Niveau le plus haut atteint dans les matières de l'utilisateur, ses badges et les titres globaux. */
-export async function unlockContext(prisma: PrismaClient, userId: string): Promise<UnlockContext> {
+export async function unlockContext(prisma: PrismaClient, userId: string, all = false): Promise<UnlockContext> {
+  if (all) return { all: true, maxLevel: Number.MAX_SAFE_INTEGER, badgeCodes: new Set(), tiers: [] };
   const [memberships, badges, { tiers }] = await Promise.all([
     prisma.membership.findMany({ where: { userId, revokedAt: null }, include: { subject: { select: { settings: true, organizationId: true } } } }),
     prisma.userBadge.findMany({ where: { userId }, include: { badge: { select: { code: true } } } }),
@@ -89,6 +92,7 @@ export async function unlockContext(prisma: PrismaClient, userId: string): Promi
 
 /** `null` si l'objet est utilisable, sinon la raison du verrouillage. */
 export function lockReason(item: { unlockType: string; unlockValue: string | null }, ctx: UnlockContext): string | null {
+  if (ctx.all) return null;
   switch (item.unlockType) {
     case "FREE":
       return null;
@@ -107,10 +111,30 @@ export function lockReason(item: { unlockType: string; unlockValue: string | nul
   }
 }
 
+export type LookLocks = Record<string, { unlockType: string; unlockValue: string | null }>;
+const LOCKS_KEY = "avatar.lookLocks";
+
+/** Règles de déblocage des options de l'avatar détaillé : celles de l'administrateur, sinon celles d'origine. */
+export async function loadLookLocks(prisma: PrismaClient): Promise<LookLocks> {
+  const row = await prisma.setting.findUnique({ where: { key: LOCKS_KEY } });
+  if (!row) return LOOK_LOCKS;
+  try {
+    const raw = JSON.parse(row.value) as LookLocks;
+    const out: LookLocks = {};
+    for (const [k, v] of Object.entries(raw)) if (v && (UNLOCK_TYPES as readonly string[]).includes(v.unlockType) && v.unlockType !== "FREE") out[k] = { unlockType: v.unlockType, unlockValue: v.unlockValue ?? null };
+    return out;
+  } catch { return LOOK_LOCKS; }
+}
+export async function saveLookLocks(prisma: PrismaClient, locks: LookLocks | null): Promise<void> {
+  if (locks === null) { await prisma.setting.deleteMany({ where: { key: LOCKS_KEY } }); return; }
+  const value = JSON.stringify(locks);
+  await prisma.setting.upsert({ where: { key: LOCKS_KEY }, create: { key: LOCKS_KEY, value }, update: { value } });
+}
+
 /** Options de l'avatar détaillé encore verrouillées pour cet utilisateur : « clé:valeur » → raison. */
-export function lockedLook(ctx: UnlockContext): Record<string, string> {
+export function lockedLook(ctx: UnlockContext, locks: LookLocks = LOOK_LOCKS): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [key, rule] of Object.entries(LOOK_LOCKS)) {
+  for (const [key, rule] of Object.entries(locks)) {
     const reason = lockReason(rule, ctx);
     if (reason) out[key] = reason;
   }

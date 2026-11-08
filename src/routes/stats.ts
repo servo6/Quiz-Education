@@ -149,7 +149,24 @@ export async function playerStats(prisma: PrismaClient, userId: string, subjectI
   const soloScores = solos.filter((p) => p.game._count.questions > 0).map((p) => ({ correct: p.correctCount, total: p.game._count.questions }));
   const bestSolo = soloScores.sort((a, b) => b.correct / b.total - a.correct / a.total || b.total - a.total)[0] ?? null;
 
+  // « Cette semaine » : 7 derniers jours comparés aux 7 précédents, meilleurs chapitres et chapitres à retravailler.
+  const win = (from: number, to: number) => {
+    let n = 0, c = 0;
+    for (let i = from; i < to; i++) { const v = daily.get(addDaysKey(today, -i)); if (v) { n += v.answers; c += v.correct; } }
+    return { answers: n, correct: c, accuracy: pct(c, n) };
+  };
+  const recentWeek = win(0, 7), previousWeek = win(7, 14);
+  const ranked = [...byChapter.values()].filter((c) => c.answered >= 5).map((c) => ({ id: c.id, name: c.name, answered: c.answered, accuracy: pct(c.correct, c.answered) as number }));
+  const insights = {
+    recent: recentWeek,
+    previous: previousWeek,
+    delta: recentWeek.accuracy != null && previousWeek.accuracy != null ? Math.round((recentWeek.accuracy - previousWeek.accuracy) * 10) / 10 : null,
+    strong: [...ranked].sort((a, b) => b.accuracy - a.accuracy).slice(0, 2),
+    weak: [...ranked].filter((c) => c.accuracy < 80).sort((a, b) => a.accuracy - b.accuracy).slice(0, 2),
+  };
+
   return {
+    insights,
     totals: {
       answers: answers.length,
       correct,
@@ -190,6 +207,42 @@ export function registerStatsRoutes(app: FastifyInstance, { prisma, auth, timezo
     const total = await prisma.membership.count({ where: { subjectId: req.params.id, revokedAt: null, user: { bannedAt: null, role: "USER" } } });
     const stats = await playerStats(prisma, ctx.user.id, req.params.id, timezone, Days.parse(req.query.days ?? 30));
     return { player: view.card(me, m.xp), rank, totalPlayers: total, ...stats };
+  });
+
+  // ── Comparaison avec un ami (amitié acceptée dans la matière) : mes statistiques, les siennes et nos duels l'un contre l'autre
+  app.get<{ Params: { id: string; friendId: string } }>("/api/subjects/:id/stats/compare/:friendId", async (req) => {
+    const ctx = await auth(req);
+    await requireMembership(prisma, ctx.user.id, req.params.id);
+    const me = ctx.user.id, fid = req.params.friendId;
+    const f = await prisma.friendship.findFirst({
+      where: { subjectId: req.params.id, status: "ACCEPTED", OR: [{ requesterId: me, addresseeId: fid }, { requesterId: fid, addresseeId: me }] },
+    });
+    if (!f) throw new HttpError(403, "not_friends", "Tu ne peux comparer qu'avec un ami");
+    const view = await subjectView(prisma, req.params.id);
+    const [mm, fm, users] = await Promise.all([
+      prisma.membership.findUniqueOrThrow({ where: { userId_subjectId: { userId: me, subjectId: req.params.id } } }),
+      prisma.membership.findUnique({ where: { userId_subjectId: { userId: fid, subjectId: req.params.id } } }),
+      prisma.user.findMany({ where: { id: { in: [me, fid] } }, select: { id: true, username: true, avatar: true } }),
+    ]);
+    if (!fm || fm.revokedAt) throw new HttpError(404, "friend_not_found", "Cet ami n'est plus dans la matière");
+    const [a, b] = await Promise.all([playerStats(prisma, me, req.params.id, timezone, 30), playerStats(prisma, fid, req.params.id, timezone, 30)]);
+    const shared = await prisma.game.findMany({
+      where: { subjectId: req.params.id, mode: { in: DUEL_MODES }, status: "FINISHED", AND: [{ players: { some: { userId: me } } }, { players: { some: { userId: fid } } }] },
+      select: { players: { select: { userId: true, result: true } } },
+      take: 500,
+    });
+    const h2h = { played: 0, wins: 0, draws: 0, losses: 0 };
+    for (const g of shared) {
+      const mine = g.players.find((p) => p.userId === me)?.result;
+      if (!mine) continue;
+      h2h.played++;
+      if (mine === "WIN") h2h.wins++; else if (mine === "DRAW") h2h.draws++; else h2h.losses++;
+    }
+    const pack = (uid: string, m: { xp: number }, st: Awaited<ReturnType<typeof playerStats>>) => ({
+      player: view.card(users.find((u) => u.id === uid)!, m.xp),
+      totals: st.totals, streak: st.streaks.daysCurrent, longestStreak: st.streaks.daysLongest, duels: st.duels, chapters: st.chapters,
+    });
+    return { me: pack(me, mm, a), friend: pack(fid, fm, b), headToHead: h2h };
   });
 
   // ── Classement filtrable : critère (XP, victoires, bonnes réponses) × période

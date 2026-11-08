@@ -18,6 +18,17 @@ export const SettingsSchema = z
     maxActiveDuels: z.number().int().min(0).max(100), // duels différés en cours par joueur et par matière (0 = illimité)
     shuffleChoices: z.boolean(), // mélange l'ordre des choix, différemment pour chaque joueur
     duelDeadlineDays: z.number().int().min(1).max(30), // durée maximale d'un duel différé
+    // Modes solo : aventure (réglages ci-dessus), survie (cœurs) et course contre la montre (chrono global).
+    adventureEnabled: z.boolean(),
+    survivalEnabled: z.boolean(),
+    survivalHearts: z.number().int().min(1).max(10),
+    survivalQuestions: z.number().int().min(1).max(100),
+    survivalTimePerQuestionSec: z.number().int().min(0).max(600), // 0 = pas de limite de temps
+    survivalXpPerCorrect: z.number().int().min(0).max(1000),
+    attackEnabled: z.boolean(),
+    attackDurationSec: z.number().int().min(10).max(3600),
+    attackMaxQuestions: z.number().int().min(5).max(200),
+    attackXpPerCorrect: z.number().int().min(0).max(1000),
     xpPerCorrect: z.number().int().min(0).max(1000),
     friendlyWinBonus: z.number().int().min(0).max(10000),
     friendlyDrawBonus: z.number().int().min(0).max(10000),
@@ -43,6 +54,16 @@ export const DEFAULT_SETTINGS: Settings = {
   duelDeadlineDays: 3,
   maxActiveDuels: 10,
   shuffleChoices: false,
+  adventureEnabled: true,
+  survivalEnabled: true,
+  survivalHearts: 3,
+  survivalQuestions: 15,
+  survivalTimePerQuestionSec: 20,
+  survivalXpPerCorrect: XP_DEFAULTS.perCorrectAnswer,
+  attackEnabled: true,
+  attackDurationSec: 180,
+  attackMaxQuestions: 100,
+  attackXpPerCorrect: XP_DEFAULTS.perCorrectAnswer,
   xpPerCorrect: XP_DEFAULTS.perCorrectAnswer,
   friendlyWinBonus: XP_DEFAULTS.friendlyWinBonus,
   friendlyDrawBonus: XP_DEFAULTS.friendlyDrawBonus,

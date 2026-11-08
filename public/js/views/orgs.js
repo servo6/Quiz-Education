@@ -1,5 +1,6 @@
 import { h, get, post, put, api, fail, toast, sheet } from "../lib.js";
-import { S, go, rerender } from "../state.js";
+import { S, go, rerender, loadCatalog } from "../state.js";
+import { avatarEl } from "../lib.js";
 
 const patch = (u, b) => api("PATCH", u, b);
 const del = (u, b) => api("DELETE", u, b);
@@ -36,9 +37,9 @@ export async function organisations() {
   const adminsSheet = (o) => sheet(`Administrateurs de « ${o.name} »`, (close) => {
     const list = h("div.list");
     const load = async () => {
-      const r = await get(`/api/organizations/${o.id}`);
+      const [r] = await Promise.all([get(`/api/organizations/${o.id}`), loadCatalog().catch(() => null)]);
       list.replaceChildren(...(r.admins.length ? r.admins.map((a) => h("div.item",
-        h("span.initial", a.username.slice(0, 1).toUpperCase()), h("div.grow", h("strong", a.username)),
+        h("span.dav", avatarEl(a.avatar ?? null, S.catalog, 40)), h("div.grow", h("strong", a.username)),
         h("button.btn.small.danger", { onclick: async () => { if (!sure(`Retirer ${a.username} de l'administration de « ${o.name} » ?`)) return;
           try { await del(`/api/organizations/${o.id}/admins/${a.id}`); toast("Administrateur retiré", "good"); load(); } catch (e) { fail(e); } } }, "Retirer"))) : [h("p.muted", "Aucun administrateur.")]));
     };
@@ -78,10 +79,10 @@ export async function matieres(loadAdminSubjects, chooseAdminSub) {
     const list = h("div.list");
     const others = h("div.stack.tight");
     const load = async () => {
-      const [r, all] = await Promise.all([get(`/api/subjects/${s.id}`), loadAdminSubjects(true)]);
+      const [r, all] = await Promise.all([get(`/api/subjects/${s.id}`), loadAdminSubjects(true), loadCatalog().catch(() => null)]);
       const here = new Set(r.managers.map((m) => m.id));
       list.replaceChildren(...(r.managers.length ? r.managers.map((m) => h("div.item",
-        h("span.initial", m.username.slice(0, 1).toUpperCase()), h("div.grow", h("strong", m.username)),
+        h("span.dav", avatarEl(m.avatar ?? null, S.catalog, 40)), h("div.grow", h("strong", m.username)),
         h("button.btn.small.danger", { onclick: async () => { if (!sure(`Retirer ${m.username} de la matière « ${s.name} » ?`)) return;
           try { await del(`/api/subjects/${s.id}/managers/${m.id}`); toast("Responsable retiré", "good"); load(); } catch (e) { fail(e); } } }, "Retirer"))) : [h("p.muted", "Aucun responsable.")]));
       const pool = new Map();
@@ -128,12 +129,12 @@ export async function joueurs() {
   const q = h("input.input", { type: "search", placeholder: "Chercher un joueur", "aria-label": "Chercher un joueur" });
   const list = h("div.list");
   async function load() {
-    const { members } = await get(`/api/organizations/${sel.value}/members`);
+    const [{ members }] = await Promise.all([get(`/api/organizations/${sel.value}/members`), loadCatalog().catch(() => null)]);
     const term = q.value.trim().toLowerCase();
     const shown = members.filter((m) => !term || m.username.toLowerCase().includes(term));
     const act = (fn) => async () => { try { await fn(); load(); } catch (e) { fail(e); } };
     list.replaceChildren(...(shown.length ? shown.map((m) => h("div.item", { style: "flex-wrap:wrap" },
-      h("span.initial", m.username.slice(0, 1).toUpperCase()),
+      h("span.dav", avatarEl(m.avatar ?? null, S.catalog, 40)),
       h("div.grow", h("strong", m.username), h("div.muted.small", `inscrit le ${fmt(m.joinedAt)}`)),
       m.banned ? h("span.chip.bad", "suspendu") : null,
       h("div.row.wrap",

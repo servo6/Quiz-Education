@@ -14,6 +14,160 @@ const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL manquant (fichier .env)");
 
 const STEPS: string[] = [
+  // Ligues hebdomadaires.
+  `CREATE TABLE IF NOT EXISTS "LeagueMember" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "subjectId" TEXT NOT NULL,
+    "tier" INTEGER NOT NULL DEFAULT 0,
+    "lastMove" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "LeagueMember_userId_subjectId_key" ON "LeagueMember"("userId", "subjectId")`,
+  `CREATE INDEX IF NOT EXISTS "LeagueMember_subjectId_tier_idx" ON "LeagueMember"("subjectId", "tier")`,
+  `CREATE TABLE IF NOT EXISTS "LeagueWeek" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "subjectId" TEXT NOT NULL,
+    "weekKey" TEXT NOT NULL,
+    "settledAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "LeagueWeek_subjectId_weekKey_key" ON "LeagueWeek"("subjectId", "weekKey")`,
+  `ALTER TABLE "LeagueMember" ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE "LeagueWeek" ENABLE ROW LEVEL SECURITY`,
+  // Salons privés : historique, pièces et achats.
+  `CREATE TABLE IF NOT EXISTS "RoomGame" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "subjectId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "size" INTEGER NOT NULL,
+    "finishedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS "RoomGame_subjectId_finishedAt_idx" ON "RoomGame"("subjectId", "finishedAt")`,
+  `CREATE TABLE IF NOT EXISTS "RoomPlayer" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "gameId" TEXT NOT NULL REFERENCES "RoomGame"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "username" TEXT NOT NULL,
+    "rank" INTEGER NOT NULL,
+    "score" INTEGER NOT NULL,
+    "correct" INTEGER NOT NULL,
+    "xpEarned" INTEGER NOT NULL DEFAULT 0,
+    "coinsEarned" INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "RoomPlayer_gameId_userId_key" ON "RoomPlayer"("gameId", "userId")`,
+  `CREATE INDEX IF NOT EXISTS "RoomPlayer_userId_idx" ON "RoomPlayer"("userId")`,
+  `CREATE TABLE IF NOT EXISTS "CoinLedger" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "amount" INTEGER NOT NULL,
+    "reason" TEXT NOT NULL,
+    "refId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS "CoinLedger_userId_idx" ON "CoinLedger"("userId")`,
+  `CREATE TABLE IF NOT EXISTS "ItemUnlock" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "itemId" TEXT NOT NULL,
+    "price" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ItemUnlock_userId_itemId_key" ON "ItemUnlock"("userId", "itemId")`,
+  `ALTER TABLE "RoomGame" ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE "RoomPlayer" ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE "CoinLedger" ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE "ItemUnlock" ENABLE ROW LEVEL SECURITY`,
+  // Examen blanc.
+  `CREATE TABLE IF NOT EXISTS "ExamAttempt" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "subjectId" TEXT NOT NULL,
+    "questionIds" TEXT NOT NULL,
+    "answers" TEXT NOT NULL DEFAULT '{}',
+    "durationSec" INTEGER NOT NULL,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
+    "correct" INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ExamAttempt_userId_subjectId_finishedAt_idx" ON "ExamAttempt"("userId", "subjectId", "finishedAt")`,
+  `ALTER TABLE "ExamAttempt" ENABLE ROW LEVEL SECURITY`,
+  // Rappel de cours par chapitre.
+  `ALTER TABLE "Chapter" ADD COLUMN IF NOT EXISTS "lesson" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "deactivatedAt" TIMESTAMP(3)`,
+  // Salons privés : état conservé pour survivre à un redémarrage.
+  `CREATE TABLE IF NOT EXISTS "RoomSnapshot" (
+    "code" TEXT NOT NULL PRIMARY KEY,
+    "data" TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `ALTER TABLE "RoomSnapshot" ENABLE ROW LEVEL SECURITY`,
+  // Signalements de questions.
+  `CREATE TABLE IF NOT EXISTS "QuestionReport" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "questionId" TEXT NOT NULL,
+    "subjectId" TEXT NOT NULL,
+    "reason" TEXT NOT NULL,
+    "comment" TEXT NOT NULL DEFAULT '',
+    "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "resolvedAt" TIMESTAMP(3)
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "QuestionReport_userId_questionId_key" ON "QuestionReport"("userId", "questionId")`,
+  `CREATE INDEX IF NOT EXISTS "QuestionReport_subjectId_status_idx" ON "QuestionReport"("subjectId", "status")`,
+  `ALTER TABLE "QuestionReport" ENABLE ROW LEVEL SECURITY`,
+  // Révision espacée : une carte par (joueur, question ratée).
+  `CREATE TABLE IF NOT EXISTS "ReviewCard" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "questionId" TEXT NOT NULL,
+    "subjectId" TEXT NOT NULL,
+    "box" INTEGER NOT NULL DEFAULT 0,
+    "dueAt" TIMESTAMP(3) NOT NULL,
+    "reviewedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lapses" INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ReviewCard_userId_questionId_key" ON "ReviewCard"("userId", "questionId")`,
+  `CREATE INDEX IF NOT EXISTS "ReviewCard_userId_subjectId_dueAt_idx" ON "ReviewCard"("userId", "subjectId", "dueAt")`,
+  `ALTER TABLE "ReviewCard" ENABLE ROW LEVEL SECURITY`,
+  // Défi du jour : mêmes questions pour tous les membres d'une matière.
+  `CREATE TABLE IF NOT EXISTS "DailyChallenge" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "subjectId" TEXT NOT NULL REFERENCES "Subject"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "day" TEXT NOT NULL,
+    "questionIds" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "DailyChallenge_subjectId_day_key" ON "DailyChallenge"("subjectId", "day")`,
+  `CREATE TABLE IF NOT EXISTS "DailyEntry" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "challengeId" TEXT NOT NULL REFERENCES "DailyChallenge"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "answers" TEXT NOT NULL DEFAULT '[]',
+    "servedAt" TIMESTAMP(3),
+    "correct" INTEGER NOT NULL DEFAULT 0,
+    "timeMs" INTEGER NOT NULL DEFAULT 0,
+    "xpEarned" INTEGER NOT NULL DEFAULT 0,
+    "finishedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "DailyEntry_challengeId_userId_key" ON "DailyEntry"("challengeId", "userId")`,
+  `CREATE INDEX IF NOT EXISTS "DailyEntry_userId_idx" ON "DailyEntry"("userId")`,
+  `ALTER TABLE "DailyChallenge" ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE "DailyEntry" ENABLE ROW LEVEL SECURITY`,
+  // Notifications push : un appareil abonné par ligne.
+  `CREATE TABLE IF NOT EXISTS "PushSubscription" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    "endpoint" TEXT NOT NULL,
+    "p256dh" TEXT NOT NULL,
+    "auth" TEXT NOT NULL,
+    "userAgent" TEXT NOT NULL DEFAULT '',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint")`,
+  `CREATE INDEX IF NOT EXISTS "PushSubscription_userId_idx" ON "PushSubscription"("userId")`,
+  `ALTER TABLE "PushSubscription" ENABLE ROW LEVEL SECURITY`,
   // Chronomètre propre à chaque joueur sur une question (duels différés) : c'est elle qui manquait si la manche ne démarrait pas.
   `CREATE TABLE IF NOT EXISTS "QuestionServe" (
     "id" TEXT NOT NULL PRIMARY KEY,

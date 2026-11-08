@@ -62,6 +62,43 @@ export function registerChapterRoutes(app: FastifyInstance, { prisma, auth }: De
     return { chapter: { id: updated.id, name: updated.name, color: updated.color, locked: updated.locked } };
   });
 
+  // ── Fusionner plusieurs chapitres en un seul (les questions sont déplacées, les doublons retirés)
+  app.post<{ Params: { id: string } }>("/api/subjects/:id/chapters/merge", async (req) => {
+    const ctx = await auth(req);
+    const subject = await loadSubject(prisma, req.params.id);
+    assertCan(ctx.actor, "chapter:manage", subject.id);
+    const body = z.object({ chapterIds: z.array(z.string().min(1)).min(2).max(50), name: chapterName }).parse(req.body);
+    const ids = [...new Set(body.chapterIds)];
+    if (ids.length < 2) throw new HttpError(422, "merge_needs_two", "Choisis au moins deux chapitres");
+    const sources = await prisma.chapter.findMany({ where: { id: { in: ids }, subjectId: subject.id, deletedAt: null }, orderBy: { name: "asc" } });
+    if (sources.length !== ids.length) throw new HttpError(404, "chapter_not_found", "Un des chapitres est introuvable");
+    const clash = await prisma.chapter.findUnique({ where: { subjectId_name: { subjectId: subject.id, name: body.name } } });
+    if (clash && !clash.deletedAt && !ids.includes(clash.id)) throw new HttpError(409, "chapter_exists", "Un chapitre porte déjà ce nom");
+
+    const result = await prisma.$transaction(async (tx) => {
+      const lesson = sources.map((c) => c.lesson.trim()).filter(Boolean).join("\n\n");
+      const common = { color: sources.find((c) => c.color)?.color ?? "", locked: sources.every((c) => c.locked), lesson };
+      // Le chapitre d'arrivée : un des chapitres fusionnés s'il porte déjà ce nom, sinon un nouveau (ou un ancien supprimé du même nom).
+      const target = clash && ids.includes(clash.id)
+        ? await tx.chapter.update({ where: { id: clash.id }, data: { ...common, color: clash.color || common.color } })
+        : clash
+          ? await tx.chapter.update({ where: { id: clash.id }, data: { deletedAt: null, ...common } })
+          : await tx.chapter.create({ data: { subjectId: subject.id, name: body.name, ...common } });
+      const others = ids.filter((id) => id !== target.id);
+      await tx.question.updateMany({ where: { chapterId: { in: others } }, data: { chapterId: target.id } });
+      await tx.importBatch.updateMany({ where: { chapterId: { in: others } }, data: { chapterId: target.id } });
+      await tx.chapter.updateMany({ where: { id: { in: others } }, data: { deletedAt: new Date() } });
+      // Doublons (même énoncé dans deux chapitres fusionnés) : on garde la plus ancienne.
+      const active = await tx.question.findMany({ where: { chapterId: target.id, deletedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, hash: true } });
+      const seen = new Set<string>(); const dup: string[] = [];
+      for (const q of active) { if (seen.has(q.hash)) dup.push(q.id); else seen.add(q.hash); }
+      if (dup.length) await tx.question.updateMany({ where: { id: { in: dup } }, data: { deletedAt: new Date() } });
+      await logAction(tx, ctx.user.id, subject.id, "MERGE_CHAPTERS", { into: target.id, name: target.name, from: sources.map((c) => c.name), duplicatesRemoved: dup.length });
+      return { chapter: { id: target.id, name: target.name, color: target.color, locked: target.locked }, questions: active.length - dup.length, duplicatesRemoved: dup.length };
+    });
+    return result;
+  });
+
   // ── Suppression d'un chapitre et de toutes ses questions (corbeille : suppression douce)
   app.delete<{ Params: { id: string } }>("/api/chapters/:id", async (req) => {
     const ctx = await auth(req);

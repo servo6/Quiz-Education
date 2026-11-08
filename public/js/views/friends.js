@@ -116,6 +116,7 @@ export async function chatView({ id }, ctx) {
 
   const menu = () => sheet(first.friend.username, (close) => h("div.stack",
     h("a.btn.block", { href: "#/duels/new", onclick: close }, icon("duel"), "Défier"),
+    h("a.btn.block", { href: `#/stats/compare/${first.friend.id}`, onclick: close }, "Comparer nos statistiques"),
     h("button.btn.danger.block", { onclick: async () => {
       if (!confirm(`Retirer ${first.friend.username} de tes amis ? La conversation sera supprimée pour vous deux.`)) return;
       try { await del(`/api/friendships/${id}`); close(); toast("Ami retiré", "good"); go("/friends"); } catch (e) { fail(e); }

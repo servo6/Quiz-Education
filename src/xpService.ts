@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-export type XpSource = "CORRECT_ANSWER" | "FRIENDLY_WIN" | "FRIENDLY_DRAW";
+export type XpSource = "CORRECT_ANSWER" | "FRIENDLY_WIN" | "FRIENDLY_DRAW" | "DAILY_CHALLENGE" | "ROOM";
 
 /**
  * Attribue de l'XP dans une matière : journal (XpEvent) et total de l'utilisateur (Membership.xp) dans la même

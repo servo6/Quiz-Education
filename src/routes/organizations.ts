@@ -1,3 +1,4 @@
+import { parseAvatar } from "../avatar.ts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
@@ -57,10 +58,10 @@ export function registerOrganizationRoutes(app: FastifyInstance, deps: Deps): vo
     const org = await loadOrg(req.params.id);
     assertCan(ctx.actor, "org:manage", org.id);
     const [admins, subjects] = await Promise.all([
-      prisma.orgAdmin.findMany({ where: { organizationId: org.id }, select: { user: { select: { id: true, username: true, bannedAt: true } } } }),
+      prisma.orgAdmin.findMany({ where: { organizationId: org.id }, select: { user: { select: { id: true, username: true, avatar: true, bannedAt: true } } } }),
       prisma.subject.findMany({ where: { organizationId: org.id }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     ]);
-    return { organization: { id: org.id, name: org.name }, admins: admins.map((a) => ({ id: a.user.id, username: a.user.username, banned: !!a.user.bannedAt })), subjects };
+    return { organization: { id: org.id, name: org.name }, admins: admins.map((a) => ({ id: a.user.id, username: a.user.username, avatar: parseAvatar(a.user.avatar), banned: !!a.user.bannedAt })), subjects };
   });
 
   app.patch<{ Params: { id: string } }>("/api/organizations/:id", async (req) => {
@@ -176,9 +177,9 @@ export function registerOrganizationRoutes(app: FastifyInstance, deps: Deps): vo
       where: { organizationId: org.id },
       orderBy: { joinedAt: "desc" },
       take: 500,
-      select: { revokedAt: true, joinedAt: true, user: { select: { id: true, username: true, bannedAt: true } } },
+      select: { revokedAt: true, joinedAt: true, user: { select: { id: true, username: true, avatar: true, bannedAt: true } } },
     });
-    return { members: rows.map((m) => ({ userId: m.user.id, username: m.user.username, joinedAt: m.joinedAt, revokedAt: m.revokedAt, banned: !!m.user.bannedAt })) };
+    return { members: rows.map((m) => ({ userId: m.user.id, username: m.user.username, avatar: parseAvatar(m.user.avatar), joinedAt: m.joinedAt, revokedAt: m.revokedAt, banned: !!m.user.bannedAt })) };
   });
 
   // ───────────── Côté joueur ─────────────

@@ -128,3 +128,45 @@ test("duel de bout en bout par WebSocket, avec reprise après reconnexion", asyn
   assert.equal(fb.result, "DRAW");
   assert.equal(fa.you.correct, 2);
 });
+
+test("réactions et voix : relayées entre les deux joueurs d'une partie, jamais hors partie", async () => {
+  const a = await member("sock-r-a");
+  const b = await member("sock-r-b");
+  const c = await member("sock-r-c");
+  const sa = await connect(a.cookie);
+  const sb = await connect(b.cookie);
+  const sc = await connect(c.cookie);
+
+  // hors partie : rien n'est relayé
+  let leaked = false;
+  sb.on("duel:reaction", () => { leaked = true; });
+  sb.on("voice:signal", () => { leaked = true; });
+  await emit(sa, "duel:react", { emoji: "👍" });
+  await emit(sa, "voice:signal", { bye: true });
+
+  const invited = once(sb, "duel:invited");
+  await emit(sa, "duel:challenge", { subjectId, opponentId: b.id });
+  const inv = await invited;
+  const started = once(sa, "duel:started");
+  await emit(sb, "duel:respond", { challengeId: inv.challengeId, accept: true });
+  await started;
+  assert.equal(leaked, false);
+
+  // en partie : l'adversaire reçoit, un tiers ne reçoit rien
+  const got = once(sb, "duel:reaction");
+  let thirdSaw = false;
+  sc.on("duel:reaction", () => { thirdSaw = true; });
+  assert.equal((await emit(sa, "duel:react", { emoji: "🔥" })).ok, true);
+  assert.equal((await got).emoji, "🔥");
+  assert.equal(thirdSaw, false);
+  // émoji hors liste refusé
+  assert.equal((await emit(sa, "duel:react", { emoji: "💣" })).ok, false);
+
+  const sig = once(sb, "voice:signal");
+  await emit(sa, "voice:signal", { description: { type: "offer", sdp: "v=0" } });
+  assert.equal((await sig).description.type, "offer");
+  assert.equal((await emit(sa, "voice:signal", { description: { type: "offer", sdp: "x".repeat(30000) } })).ok, false);
+  assert.equal((await emit(sa, "voice:config", {})).iceServers.length >= 1, true);
+
+  await emit(sa, "duel:forfeit", { gameId: (await started).gameId });
+});

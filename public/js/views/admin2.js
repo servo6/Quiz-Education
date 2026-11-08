@@ -1,5 +1,8 @@
 import { h, mount, get, post, put, api, fail, toast, sheet, errorMessage, rich } from "../lib.js";
-import { S, loadMe, rerender } from "../state.js";
+import { S, loadMe, rerender, loadCatalog } from "../state.js";
+import { avatarEl } from "../lib.js";
+import { drawAvatar, OPTIONS } from "../avatar.js";
+import { VIEW } from "./avatarEditor.js";
 
 const patch = (u, b) => api("PATCH", u, b);
 const del = (u, b) => api("DELETE", u, b);
@@ -74,7 +77,7 @@ export async function comptes() {
     const p = new URLSearchParams({ q: q.value, limit: "20" });
     if (filter.value === "banned") p.set("banned", "true"); else if (filter.value) p.set("role", filter.value);
     if (cursor) p.set("cursor", cursor);
-    const r = await get(`/api/users?${p}`);
+    const [r] = await Promise.all([get(`/api/users?${p}`), loadCatalog().catch(() => null)]);
     r.users.forEach((u) => list.append(row(u)));
     if (!r.users.length && reset) list.append(h("p.muted", "Aucun compte."));
     cursor = r.nextCursor; more.hidden = !cursor; more.textContent = "Afficher plus";
@@ -84,10 +87,11 @@ export async function comptes() {
   function row(u) {
     const me = u.id === S.me.user.id;
     return h("div.item", { style: "flex-wrap:wrap" },
-      h("span.initial", u.username.slice(0, 1).toUpperCase()),
-      h("div.grow", h("strong", u.username, me ? " (toi)" : ""), h("div.muted.small", `${u.email ? u.email + " · " : ""}${u.subjectCount} matière${u.subjectCount > 1 ? "s" : ""} · inscrit le ${fmt(u.createdAt)}`)),
+      h("span.dav", avatarEl(u.avatar ?? null, S.catalog, 40)),
+      h("div.grow", h("strong", u.username, me ? " (toi)" : ""), h("div.muted.small", `${u.email ? u.email + " · " : ""}${u.subjectCount} matière${u.subjectCount > 1 ? "s" : ""} · inscrit le ${fmt(u.createdAt)}`),
+        u.organizations?.length ? h("div.muted.small", `Organisation${u.organizations.length > 1 ? "s" : ""} : ${u.organizations.join(", ")}`) : null),
       u.role !== "USER" ? h("span.chip.amber", u.role === "ADMIN" ? "super admin" : u.role === "ORG_ADMIN" ? "admin d'organisation" : "responsable") : null,
-      u.banned ? h("span.chip.bad", "suspendu") : null,
+      u.deactivated ? h("span.chip.amber", "désactivé par l'utilisateur") : u.banned ? h("span.chip.bad", "suspendu") : null,
       u.overdue ? h("span.chip.bad", "vérification dépassée") : null,
       u.role !== "USER" && u.role !== "ADMIN" ? (u.emailVerified ? h("span.chip.good", "e-mail vérifié") : !u.overdue ? h("span.chip.amber", u.verifyDeadline ? `à vérifier avant le ${fmt(u.verifyDeadline)}` : "e-mail non vérifié") : null) : null,
       !me && u.role !== "USER" && u.role !== "ADMIN" && !u.emailVerified && S.me.user.role === "ADMIN" ? h("button.btn.small", { onclick: act(async () => { const d = prompt(`Prolonger le délai de vérification de ${u.username} de combien de jours ? (1 à 90)`, "3"); if (!d) return; await post(`/api/users/${u.id}/extend-verification`, { days: Number(d) }); toast("Délai prolongé", "good"); }) }, "Prolonger") : null,
@@ -162,7 +166,7 @@ export async function badges() {
 // ───────── Objets d'avatar ─────────
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
 const UNLOCKS = { FREE: "Libre", LEVEL: "Niveau minimum", BADGE: "Badge obtenu", TIER: "Titre atteint" };
-export async function avatars() {
+async function customItems() {
   const r = await get("/api/avatar/items");
   const edit = (it) => sheet(it ? "Modifier l'objet" : "Nouvel objet", (close) => {
     const cat = h("select.input", Object.entries(CATS).map(([k, l]) => h("option", { value: k }, l))); if (it) cat.value = it.category;
@@ -184,4 +188,58 @@ export async function avatars() {
       h("div.list", list.map((i) => h("div.item", h("div.grow", h("strong", i.name), h("div.muted.small", i.unlockType === "FREE" ? "Libre" : `${UNLOCKS[i.unlockType]} : ${i.unlockValue}`)),
         h("button.btn.small", { onclick: () => edit(i) }, "Modifier"),
         h("button.btn.small.danger", { onclick: async () => { if (!confirm(`Supprimer « ${i.name} » ?`)) return; try { await del(`/api/avatar/items/${i.id}`); toast("Objet supprimé", "good"); rerender(); } catch (e) { fail(e); } } }, "Supprimer"))))) : null; }));
+}
+
+
+// ───────── Avatar intégré (2D/3D) : conditions de déblocage de chaque option ─────────
+const LOOK_LABELS = { face: "Forme du visage", eyes: "Yeux", brows: "Sourcils", nose: "Nez", mouth: "Bouche", hair: "Coiffure", beard: "Barbe", glasses: "Lunettes", earrings: "Boucles d'oreilles", headwear: "Couvre-chef", outfit: "Tenue", freckles: "Taches de rousseur", mark: "Marque", blush: "Joues", bg: "Fond" };
+const LOCK_TYPES = { FREE: "Libre", LEVEL: "Niveau minimum", BADGE: "Badge obtenu", TIER: "Titre atteint" };
+const LOCK_HINT = { LEVEL: "Niveau (ex. 10)", BADGE: "Code du badge (ex. wins_50)", TIER: "Nom du titre (ex. Expert)" };
+
+async function lookLocksPanel() {
+  const { locks: current } = await get("/api/avatar/look-locks");
+  const draft = JSON.parse(JSON.stringify(current)); // « clé:valeur » → { unlockType, unlockValue }
+  let cat = "hair";
+  const tabs = h("div.seg.wrap", { role: "tablist" });
+  const list = h("div.list");
+  const status = h("span.muted.small");
+  const paintTabs = () => tabs.replaceChildren(...Object.keys(OPTIONS).map((k) => h("button", { type: "button", role: "tab", "aria-pressed": String(k === cat), onclick: () => { cat = k; paintTabs(); paintList(); } },
+    LOOK_LABELS[k] ?? k, Object.keys(draft).some((x) => x.startsWith(k + ":")) ? " •" : "")));
+  const paintList = () => list.replaceChildren(...OPTIONS[cat].map(([id, label]) => {
+    const key = `${cat}:${id}`;
+    const rule = draft[key] ?? { unlockType: "FREE", unlockValue: null };
+    const type = h("select.input", { "aria-label": `Condition pour ${label}`, style: "max-width:190px" }, Object.entries(LOCK_TYPES).map(([k, l]) => h("option", { value: k }, l)));
+    type.value = rule.unlockType;
+    const val = h("input.input", { value: rule.unlockValue ?? "", style: "max-width:200px", "aria-label": `Valeur pour ${label}` });
+    const sync = () => {
+      val.hidden = type.value === "FREE"; val.placeholder = LOCK_HINT[type.value] ?? "";
+      if (type.value === "FREE") delete draft[key]; else draft[key] = { unlockType: type.value, unlockValue: val.value.trim() || null };
+      status.textContent = "Modifications non enregistrées";
+    };
+    type.onchange = () => { sync(); paintTabs(); };
+    val.oninput = sync;
+    val.hidden = type.value === "FREE"; val.placeholder = LOCK_HINT[type.value] ?? "";
+    return h("div.item", { style: "flex-wrap:wrap;gap:10px" },
+      drawAvatar({ items: {}, colors: {}, look: { [cat]: id } }, [], 52, { view: VIEW[cat] || VIEW.face, noFrame: true }),
+      h("div.grow", h("strong", label), h("div.muted.small", rule.unlockType === "FREE" ? "Libre pour tous" : "Verrouillé")), type, val);
+  }));
+  const save = async () => {
+    try { await put("/api/avatar/look-locks", { locks: draft }); status.textContent = "Enregistré"; toast("Conditions de déblocage enregistrées", "good"); } catch (e) { fail(e); }
+  };
+  const reset = async () => {
+    if (!confirm("Revenir aux conditions d'origine ?")) return;
+    try { await del("/api/avatar/look-locks"); toast("Conditions d'origine rétablies", "good"); rerender(); } catch (e) { fail(e); }
+  };
+  paintTabs(); paintList();
+  return h("section.card.stack",
+    h("div", h("h2", "Avatar intégré (2D/3D)"), h("p.muted.small", "Choisis pour chaque option du créateur d'avatar (visage, coiffure, tenue…) si elle est libre ou débloquée par un niveau, un badge ou un titre. Un point • signale une catégorie qui contient des options verrouillées.")),
+    tabs, list,
+    h("div.row.between.wrap", status, h("div.row.wrap", h("button.btn.ghost", { type: "button", onclick: reset }, "Valeurs d'origine"), h("button.btn.primary", { type: "button", onclick: save }, "Enregistrer"))));
+}
+
+/** Panneau « Avatars » : options de l'avatar intégré, puis images personnalisées (cadres, objets ajoutés à la main). */
+export async function avatars() {
+  const [look, custom] = await Promise.all([lookLocksPanel(), customItems()]);
+  return h("div.stack", look,
+    h("section.card.stack", h("div", h("h2", "Images personnalisées"), h("p.muted.small", "Cadres et objets graphiques ajoutés à la main (fichier image). Les cadres s'ajoutent à l'avatar intégré.")), custom));
 }

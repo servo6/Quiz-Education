@@ -21,13 +21,15 @@ export function registerHistoryRoutes(app: FastifyInstance, { prisma, auth }: De
     return {
       games: games.map((g) => {
         let total = 0;
-        try { total = (JSON.parse(g.config) as { totalQuestions?: number }).totalQuestions ?? 0; } catch { /* config illisible */ }
+        let variant = "ADVENTURE";
+        try { const c = JSON.parse(g.config) as { totalQuestions?: number; variant?: string }; total = c.totalQuestions ?? 0; variant = c.variant ?? "ADVENTURE"; } catch { /* config illisible */ }
         return {
           id: g.id,
           status: g.status,
           chapter: g.rounds[0]?.chapter ?? null,
           correct: g.players[0]?.correctCount ?? 0,
           total,
+          variant,
           xp: g.players[0]?.xpEarned ?? 0,
           at: g.finishedAt ?? g.createdAt,
         };

@@ -3,6 +3,8 @@ import { h, mount, toast, confetti, svg, rich, avatarEl } from "./lib.js";
 import { S, refreshSummary, loadMe, lvl, loadCatalog } from "./state.js";
 import { versusBar } from "./stage.js";
 import { initVoice, voiceSync } from "./voice.js";
+import { reportButton } from "./report.js";
+import { initReactions, reactionsSync, showReaction } from "./reactions.js";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 const C = 2 * Math.PI * 26;
@@ -28,6 +30,7 @@ export function initLive(sock) {
   socket = sock;
   if (!layer) { layer = h("div.stage", { id: "live", hidden: true, role: "dialog", "aria-modal": "true", "aria-label": "Duel en direct" }); document.body.append(layer); }
   initVoice(sock);
+  initReactions(sock);
   const on = (ev, fn) => socket.on(ev, (p) => { try { fn(p ?? {}); } catch (e) { console.error(e); } });
 
   on("duel:invited", (p) => { invite = p; render(); });
@@ -74,6 +77,7 @@ const scoreBar = () => versusBar(G.you, G.opponent, { scores: { you: G.scores?.y
 
 function render() {
   voiceSync(G, S.me?.user?.id);
+  reactionsSync(G);
   stopTick();
   if (!G && !invite && !waiting) { layer.hidden = true; document.body.style.overflow = ""; return; }
   layer.hidden = false; document.body.style.overflow = "hidden";
@@ -156,7 +160,7 @@ function renderQuestion(banner) {
   const status = rv ? h("div.feedback",
     h("div.row.between", h("div.verdict", { class: rv.you.correct ? "ok" : "ko" }, rv.you.timedOut ? "Temps écoulé" : rv.you.correct ? "Bonne réponse !" : "Raté"), rv.you.xpGained ? h("span.xp-pop", `+${rv.you.xpGained} XP`) : null),
     rv.opponent.timedOut ? h("div.small", `${G.opponent.username} n'a pas répondu à temps.`) : null,
-    rv.explanation ? h("p", rich(rv.explanation)) : null, h("p.small", { style: "opacity:.8" }, "Question suivante dans un instant…"))
+    rv.explanation ? h("p", rich(rv.explanation)) : null, h("div", { style: "text-align:right" }, reportButton(q.gameQuestionId)), h("p.small", { style: "opacity:.8" }, "Question suivante dans un instant…"))
     : h("div.feedback", G.answered ? (G.oppAnswered ? "Réponse envoyée…" : `Réponse envoyée. En attente de ${G.opponent.username}…`) : (G.oppAnswered ? `${G.opponent.username} a déjà répondu !` : "À toi de répondre !"));
   mount(layer, h("div.stage-inner",
     h("div.stage-top", h("div.q-meta", { style: "flex:1" }, `Duel en direct · manche ${q.round}/${G.rounds} · question ${q.indexInRound}/${q.questionsInRound}`),
@@ -172,7 +176,10 @@ function renderDone() {
   const gained = (f.you?.xpFromAnswers ?? 0) + (f.you?.bonus ?? 0);
   mount(layer, h("div.stage-inner", h("div.stage-top", h("div.q-meta", "Duel en direct")),
     h("div.q-wrap.center", h("div.result-score", label),
-      h("p", `${G.you?.username ?? "Toi"} ${f.you?.correct ?? 0} – ${f.opponent?.correct ?? 0} ${f.opponent?.username ?? ""}`),
+      h("div.rvs",
+        h("div.dside.left", h("span.dav.big", avatarEl(S.me?.user.avatar ?? null, S.catalog, 76)), h("span.dname", G.you?.username ?? "Toi")),
+        h("div.dscore", h("b", String(f.you?.correct ?? 0)), h("i", "–"), h("b", String(f.opponent?.correct ?? 0))),
+        h("div.dside.right", h("span.dav.big", avatarEl(G.opponent?.avatar ?? null, S.catalog, 76)), h("span.dname", f.opponent?.username ?? G.opponent?.username ?? ""))),
       h("div", h("span.chip.amber", `+${gained} XP`), " ", f.you?.level ? h("span.chip", `Niveau ${lvl(f.you.level)}`) : null),
       f.you?.leveledUp ? h("strong", "Nouveau niveau !") : null,
       f.you?.bonus ? h("p.small", `Dont ${f.you.bonus} XP de bonus.`) : null),

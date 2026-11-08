@@ -8,16 +8,19 @@ import type { Actor } from "../permissions.ts";
 import { loadSubject } from "../access.ts";
 
 /** Identifiants des thèmes de l'interface (les styles sont dans public/css/themes.css). */
-export const THEMES = ["graphite", "porcelain", "paper", "midnight", "mono", "emerald", "azure", "aubergine", "nord", "sepia", "royal", "ruby", "contrast"] as const;
+export const THEMES = ["graphite", "porcelain", "paper", "midnight", "mono", "emerald", "azure", "aubergine", "nord", "sepia", "royal", "ruby", "contrast", "aurora", "neon", "goldblack", "pousse", "pousse-clair", "ciel"] as const;
+/** Polices de l'interface ; « theme » = chaque thème garde sa propre police. */
+export const FONTS = ["quicksand", "nunito", "inter", "dmsans", "theme"] as const;
+export const DEFAULT_FONT = "quicksand";
 export const DEFAULT_THEME = "graphite";
 
 const ThemeBody = z
-  .object({ theme: z.enum(THEMES).optional(), allowUserChoice: z.boolean().optional() })
+  .object({ theme: z.enum(THEMES).optional(), allowUserChoice: z.boolean().optional(), font: z.enum(FONTS).optional() })
   .strict()
   .refine((b) => Object.keys(b).length > 0, "Aucune modification demandée");
 
 async function readTheme(prisma: Deps["prisma"]) {
-  const rows = await prisma.setting.findMany({ where: { key: { in: ["ui.theme", "ui.allowUserChoice"] } } });
+  const rows = await prisma.setting.findMany({ where: { key: { in: ["ui.theme", "ui.allowUserChoice", "ui.font"] } } });
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const parse = <T>(k: string, fallback: T): T => {
     try {
@@ -31,6 +34,8 @@ async function readTheme(prisma: Deps["prisma"]) {
   return {
     theme: (THEMES as readonly string[]).includes(theme) ? theme : DEFAULT_THEME,
     allowUserChoice: parse<boolean>("ui.allowUserChoice", true),
+    font: (FONTS as readonly string[]).includes(parse<string>("ui.font", DEFAULT_FONT)) ? parse<string>("ui.font", DEFAULT_FONT) : DEFAULT_FONT,
+    fonts: FONTS,
     themes: THEMES,
   };
 }
@@ -43,7 +48,7 @@ export function registerThemeRoutes(app: FastifyInstance, { prisma, auth }: Deps
     const ctx = await auth(req);
     assertCan(ctx.actor, "settings:global");
     const body = ThemeBody.parse(req.body);
-    for (const [key, value] of [["ui.theme", body.theme], ["ui.allowUserChoice", body.allowUserChoice]] as const) {
+    for (const [key, value] of [["ui.theme", body.theme], ["ui.allowUserChoice", body.allowUserChoice], ["ui.font", body.font]] as const) {
       if (value === undefined) continue;
       await prisma.setting.upsert({ where: { key }, create: { key, value: JSON.stringify(value) }, update: { value: JSON.stringify(value) } });
     }

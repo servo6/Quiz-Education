@@ -24,6 +24,10 @@ const EnvSchema = z.object({
   MAIL_FROM_NAME: z.string().default("Quiz"),
   /** Adresse publique du site, utilisée dans les liens des e-mails (ex. https://quiz-education.onrender.com). */
   APP_URL: z.string().url().optional(),
+  /** Notifications push : clés VAPID (générées par `npm run push:keys`). Sans elles, les notifications sont désactivées. */
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
   REGISTRATION_OPEN: z
     .enum(["true", "false"])
     .default("true")

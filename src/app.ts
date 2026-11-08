@@ -11,6 +11,10 @@ import { invalidateSettings } from "./settingsStore.ts";
 import { DuelEngine, type Timings } from "./duel/engine.ts";
 import { SocketHub } from "./duel/hub.ts";
 import { attachSocketServer } from "./duel/socket.ts";
+import { registerLessonRoutes } from "./routes/lessons.ts";
+import { registerExamRoutes } from "./routes/exam.ts";
+import { registerWalletRoutes } from "./routes/wallet.ts";
+import { RoomEngine } from "./duel/rooms.ts";
 import { registerErrorHandling } from "./http.ts";
 import { registerAuthRoutes } from "./routes/auth.ts";
 import { registerChapterRoutes } from "./routes/chapters.ts";
@@ -32,6 +36,12 @@ import { registerSubjectRoutes } from "./routes/subjects.ts";
 import { registerThemeRoutes, registerScopedThemeRoutes } from "./routes/theme.ts";
 import { createMailer, type Mailer } from "./mailer.ts";
 import { registerEmailRoutes } from "./routes/email.ts";
+import { registerDailyRoutes } from "./routes/daily.ts";
+import { registerReviewRoutes } from "./routes/review.ts";
+import { registerReportRoutes } from "./routes/reports.ts";
+import { registerLeagueRoutes } from "./routes/league.ts";
+import { registerPushRoutes } from "./routes/push.ts";
+import { disabledPusher, type Pusher } from "./push.ts";
 import { DEFAULT_TIMEZONE } from "./time.ts";
 
 export interface AppOptions {
@@ -55,6 +65,8 @@ export interface AppOptions {
   staticDir?: string;
   /** Envoi d'e-mails (vérification, mot de passe oublié). Défaut : affichage dans le terminal. */
   mailer?: Mailer;
+  /** Notifications push (désactivées par défaut). */
+  pusher?: Pusher;
   /** Adresse publique du site pour les liens des e-mails. */
   appUrl?: string;
 }
@@ -118,9 +130,18 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   registerSoloRoutes(app, deps);
   registerHistoryRoutes(app, deps);
   const hub = new SocketHub();
+  hub.pusher = opts.pusher ?? disabledPusher;
+  registerPushRoutes(app, deps, hub.pusher);
   app.decorate("hub", hub);
   registerDuelAsyncRoutes(app, deps, hub);
   registerStatsRoutes(app, deps);
+  registerDailyRoutes(app, deps);
+  registerReviewRoutes(app, deps);
+  registerReportRoutes(app, deps);
+  registerLeagueRoutes(app, deps);
+  registerWalletRoutes(app, deps);
+  registerExamRoutes(app, deps);
+  registerLessonRoutes(app, deps);
   registerOverviewRoutes(app, deps);
   registerSocialRoutes(app, deps, hub);
   registerProgressRoutes(app, deps);
@@ -132,8 +153,11 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const duels = new DuelEngine({ prisma: opts.prisma, hub, timings: opts.duelTimings, logger: app.log });
   app.decorate("duels", duels);
   registerDuelRoutes(app, deps, duels, hub);
+  const rooms = new RoomEngine({ prisma: opts.prisma, hub, timings: opts.duelTimings, logger: app.log });
+  void rooms.restore().catch((e) => app.log.error(e, "salons : reprise"));
+  app.addHook("onClose", async () => rooms.shutdown());
   if (opts.realtime !== false) {
-    const io = attachSocketServer(app, { prisma: opts.prisma, engine: duels, hub });
+    const io = attachSocketServer(app, { prisma: opts.prisma, engine: duels, hub, rooms });
     app.addHook("preClose", async () => {
       io.local.disconnectSockets(true);
     });

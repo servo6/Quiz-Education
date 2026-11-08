@@ -50,6 +50,7 @@ export async function playerStatsBody(load, { initialDays = 30 } = {}) {
     const bestHour = hourMax > 0 ? data.hours.indexOf(hourMax) : null;
 
     root.replaceChildren(
+      weekCard(data.insights) ?? "",
       h("section.kpis",
         kpi(st.daysCurrent, `${plural(st.daysCurrent, "jour")} de série`, { tone: st.daysCurrent > 0 ? "accent" : "", sub: st.practicedToday ? "Déjà pratiqué aujourd'hui" : st.daysCurrent > 0 ? "Pratique aujourd'hui pour la garder" : "Lance une partie pour démarrer" }),
         kpi(st.daysLongest, `${plural(st.daysLongest, "jour")}, record de série`),
@@ -96,6 +97,52 @@ export async function playerStatsBody(load, { initialDays = 30 } = {}) {
   }
   paint();
   return root;
+}
+
+/** « Cette semaine » : tendance des 7 derniers jours, chapitres forts et à retravailler. */
+function weekCard(ins) {
+  if (!ins || !ins.recent.answers) return null;
+  const d = ins.delta;
+  const trend = d == null ? h("span.chip", "Première semaine d'activité")
+    : d > 0 ? h("span.chip.good", `▲ +${d} points`) : d < 0 ? h("span.chip.bad", `▼ ${d} points`) : h("span.chip", "= stable");
+  const list = (title, rows, cls) => rows.length ? h("div.stack.tight", h("strong.small", title), h("div.form-chips", rows.map((c) => h("span.chip", { class: cls, title: `${c.answered} réponses` }, `${c.name} · ${c.accuracy} %`)))) : null;
+  return h("section.card.stack", h("h2", "Cette semaine"),
+    h("div.row.between.wrap", h("div", h("strong", `${ins.recent.accuracy} % de réussite`), h("div.muted.small", `${ins.recent.correct} bonnes réponses sur ${ins.recent.answers}`
+      + (ins.previous.answers ? ` · semaine précédente : ${ins.previous.accuracy} %` : ""))), trend),
+    list("Points forts", ins.strong, "good"), list("À retravailler", ins.weak, "amber"));
+}
+
+/** Comparaison avec un ami : statistiques côte à côte et bilan de vos duels. */
+export async function compareView({ friendId }) {
+  const sub = activeSubject();
+  const [r, cat] = await Promise.all([get(`/api/subjects/${sub.id}/stats/compare/${friendId}`), loadCatalog().catch(() => [])]);
+  const { me, friend, headToHead: hh } = r;
+  const head = (p) => h("div.center.stack.tight", avatarEl(p.player.avatar, cat, 56), h("strong", p.player.username), h("div.muted.small", `Niveau ${lvl(p.player.level)}`));
+  // Une ligne : valeur de chacun, la meilleure est mise en valeur (plus petit = meilleur si `lower`).
+  const row = (label, a, b, fmt = (v) => (v == null ? "–" : String(v)), lower = false) => {
+    const win = a == null || b == null || a === b ? 0 : (lower ? a < b : a > b) ? 1 : -1;
+    return h("div.cmp-row", h("b", { class: win === 1 ? "win" : "" }, fmt(a)), h("span.muted.small", label), h("b", { class: win === -1 ? "win" : "" }, fmt(b)));
+  };
+  const chapNames = [...new Set([...me.chapters, ...friend.chapters].map((c) => c.name))].sort();
+  const acc = (p, n) => p.chapters.find((c) => c.name === n)?.accuracy ?? null;
+  return h("div.stack",
+    h("a.muted", { href: "#/friends" }, "← Amis"),
+    h("h1", "Comparer"),
+    h("section.card.stack", h("div.cmp-head", head(me), h("span.vs-badge", "VS"), head(friend)),
+      h("div.stack.tight",
+        row("Réussite", me.totals.accuracy, friend.totals.accuracy, (v) => (v == null ? "–" : `${v} %`)),
+        row("Bonnes réponses", me.totals.correct, friend.totals.correct),
+        row("Temps moyen", me.totals.avgTimeMs, friend.totals.avgTimeMs, (v) => (v == null ? "–" : `${(v / 1000).toFixed(1).replace(".", ",")} s`), true),
+        row("XP gagnée", me.totals.xp, friend.totals.xp),
+        row("Jours de série", me.streak, friend.streak),
+        row("Record de série", me.longestStreak, friend.longestStreak),
+        row("Duels gagnés", me.duels.wins, friend.duels.wins))),
+    h("section.card.center.stack", h("h2", "Vos duels l'un contre l'autre"),
+      hh.played ? h("div", h("div.result-score", `${hh.wins} – ${hh.losses}`), h("div.muted.small", `${hh.played} duel${hh.played > 1 ? "s" : ""} · ${hh.draws} égalité${hh.draws > 1 ? "s" : ""}`))
+        : h("p.muted", "Vous ne vous êtes pas encore affrontés."),
+      h("a.btn.primary", { href: "#/duels/new" }, "Défier")),
+    chapNames.length ? h("section.card.stack", h("h2", "Par chapitre"),
+      h("div.stack.tight", chapNames.map((n) => row(n, acc(me, n), acc(friend, n), (v) => (v == null ? "–" : `${v} %`))))) : null);
 }
 
 export async function statsView() {

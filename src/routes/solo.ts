@@ -24,11 +24,15 @@ const GameConfigSchema = z.object({
   totalQuestions: z.number(),
   startXp: z.number(),
   shuffleChoices: z.boolean().default(false),
+  variant: z.enum(["ADVENTURE", "SURVIVAL", "TIMEATTACK"]).default("ADVENTURE"),
+  hearts: z.number().default(0), // survie : nombre de vies au départ
+  deadlineAt: z.number().default(0), // contre-la-montre : fin de la partie (ms epoch)
+  durationSec: z.number().default(0),
 });
 type GameConfig = z.infer<typeof GameConfigSchema>;
 
-const StartBody = z.object({ subjectId: z.string().min(1), chapterId: z.string().min(1) });
-const AnswerBody = z.object({ gameQuestionId: z.string().min(1), choiceIndex: z.number().int().min(0) });
+const StartBody = z.object({ subjectId: z.string().min(1), chapterId: z.string().min(1), mode: z.enum(["ADVENTURE", "SURVIVAL", "TIMEATTACK"]).default("ADVENTURE") });
+const AnswerBody = z.object({ gameQuestionId: z.string().min(1), choiceIndex: z.number().int().min(0), timedOut: z.boolean().optional() });
 
 function shuffle<T>(items: T[]): T[] {
   const a = [...items];
@@ -93,7 +97,17 @@ type QuestionView = {
   choices: string[];
   timeLimitSec: number;
   remainingMs: number | null;
+  /** Survie : cœurs restants. Contre-la-montre : chrono global. */
+  variant?: GameConfig["variant"];
+  hearts?: number;
+  heartsMax?: number;
+  okSoFar?: number;
 };
+
+/** Cœurs restants d'une partie survie (0 pour les autres modes). */
+const heartsLeft = (cfg: GameConfig, wrong: number) => (cfg.variant === "SURVIVAL" ? Math.max(0, cfg.hearts - wrong) : undefined);
+/** Durée de la question en millisecondes : le chrono global pour la course, sinon la limite par question. */
+const questionLimitMs = (cfg: GameConfig) => (cfg.variant === "TIMEATTACK" ? cfg.durationSec * 1000 : cfg.timePerQuestionSec * 1000);
 
 type Current = { status: "FINISHED" } | { status: "IN_PROGRESS"; question: QuestionView };
 
@@ -107,7 +121,7 @@ async function finishGame(prisma: PrismaClient, gameId: string): Promise<void> {
  * Ne révèle jamais la bonne réponse.
  */
 async function currentQuestion(prisma: PrismaClient, gameId: string, userId: string, cfg: GameConfig, subjectId: string): Promise<Current> {
-  const limitMs = cfg.timePerQuestionSec * 1000;
+  const limitMs = questionLimitMs(cfg);
   for (let guard = 0; guard <= cfg.totalQuestions + 1; guard++) {
     if (!gameCache.get(gameId)?.players.has(userId)) {
       const rows = await prisma.gameQuestion.findMany({ where: { gameId }, orderBy: { position: "asc" }, include: { question: true } });
@@ -116,12 +130,16 @@ async function currentQuestion(prisma: PrismaClient, gameId: string, userId: str
     const st = gameCache.get(gameId)!;
     // État mutable (réponses, chrono) : deux lectures simples en parallèle.
     const [answers, serves] = await Promise.all([
-      prisma.answer.findMany({ where: { userId, gameQuestion: { gameId } }, select: { gameQuestionId: true } }),
+      prisma.answer.findMany({ where: { userId, gameQuestion: { gameId } }, select: { gameQuestionId: true, isCorrect: true } }),
       prisma.gameQuestion.findMany({ where: { gameId }, select: { id: true, servedAt: true } }),
     ]);
     const done = new Set(answers.map((a) => a.gameQuestionId));
+    const wrong = answers.filter((a) => !a.isCorrect).length;
     const next = st.qs.find((g) => !done.has(g.id));
-    if (!next) {
+    const over =
+      (cfg.variant === "SURVIVAL" && wrong >= cfg.hearts) ||
+      (cfg.variant === "TIMEATTACK" && Date.now() > cfg.deadlineAt + GRACE_MS);
+    if (!next || over) {
       await finishGame(prisma, gameId);
       return { status: "FINISHED" };
     }
@@ -134,7 +152,7 @@ async function currentQuestion(prisma: PrismaClient, gameId: string, userId: str
     }
     const elapsed = now.getTime() - servedAt.getTime();
 
-    if (limitMs > 0 && elapsed > limitMs + GRACE_MS) {
+    if (cfg.variant !== "TIMEATTACK" && limitMs > 0 && elapsed > limitMs + GRACE_MS) {
       try {
         await prisma.answer.create({ data: { gameQuestionId: next.id, userId, choiceIndex: null, isCorrect: false, timeMs: limitMs } });
       } catch (e) {
@@ -151,8 +169,12 @@ async function currentQuestion(prisma: PrismaClient, gameId: string, userId: str
         total: st.qs.length,
         text: next.question.text,
         choices: shownChoices(next.id, userId, next.question.choices, cfg),
-        timeLimitSec: cfg.timePerQuestionSec,
-        remainingMs: limitMs > 0 ? Math.max(0, limitMs - elapsed) : null,
+        timeLimitSec: cfg.variant === "TIMEATTACK" ? cfg.durationSec : cfg.timePerQuestionSec,
+        remainingMs: cfg.variant === "TIMEATTACK" ? Math.max(0, cfg.deadlineAt - now.getTime()) : limitMs > 0 ? Math.max(0, limitMs - elapsed) : null,
+        variant: cfg.variant,
+        hearts: heartsLeft(cfg, wrong),
+        heartsMax: cfg.variant === "SURVIVAL" ? cfg.hearts : undefined,
+        okSoFar: answers.length - wrong,
       },
     };
   }
@@ -206,13 +228,21 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     const subject = await prisma.subject.findUnique({ where: { id: req.params.id } });
     if (!subject) throw new HttpError(404, "subject_not_found", "Matière introuvable");
     const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
-    return { ...(await dailyStatus(ctx.user.id, subject.id, settings.soloGamesPerDay)), questionsPerGame: settings.soloQuestions };
+    return {
+      ...(await dailyStatus(ctx.user.id, subject.id, settings.soloGamesPerDay)),
+      questionsPerGame: settings.soloQuestions,
+      modes: {
+        ADVENTURE: { enabled: settings.adventureEnabled, questions: settings.soloQuestions, timePerQuestionSec: settings.timePerQuestionSec },
+        SURVIVAL: { enabled: settings.survivalEnabled, questions: settings.survivalQuestions, hearts: settings.survivalHearts, timePerQuestionSec: settings.survivalTimePerQuestionSec },
+        TIMEATTACK: { enabled: settings.attackEnabled, durationSec: settings.attackDurationSec },
+      },
+    };
   });
 
   // ── Lancer une partie (ou reprendre celle en cours)
   app.post("/api/solo/start", async (req, reply) => {
     const ctx = await auth(req);
-    const { subjectId, chapterId } = StartBody.parse(req.body);
+    const { subjectId, chapterId, mode } = StartBody.parse(req.body);
     const membership = await requireMembership(prisma, ctx.user.id, subjectId);
     const subject = await prisma.subject.findUniqueOrThrow({ where: { id: subjectId } });
     const settings = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
@@ -230,6 +260,9 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
       });
     }
 
+    const modeOn = { ADVENTURE: settings.adventureEnabled, SURVIVAL: settings.survivalEnabled, TIMEATTACK: settings.attackEnabled }[mode];
+    if (!modeOn) throw new HttpError(403, "mode_disabled", "Ce mode de jeu est désactivé dans cette matière");
+
     if (settings.soloGamesPerDay > 0 && status.played >= settings.soloGamesPerDay) {
       throw new HttpError(429, "daily_limit_reached", `Limite atteinte : ${settings.soloGamesPerDay} partie(s) solo par jour dans cette matière.`, status);
     }
@@ -243,10 +276,15 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     const available = await prisma.question.findMany({ where: { chapterId, deletedAt: null }, select: { id: true } });
     if (available.length === 0) throw new HttpError(422, "chapter_empty", "Ce chapitre ne contient aucune question");
 
-    const picked = shuffle(available.map((q) => q.id)).slice(0, settings.soloQuestions);
+    const count = mode === "SURVIVAL" ? settings.survivalQuestions : mode === "TIMEATTACK" ? settings.attackMaxQuestions : settings.soloQuestions;
+    const picked = shuffle(available.map((q) => q.id)).slice(0, count);
     const cfg: GameConfig = {
-      timePerQuestionSec: settings.timePerQuestionSec,
-      xpPerCorrect: settings.xpPerCorrect,
+      timePerQuestionSec: mode === "SURVIVAL" ? settings.survivalTimePerQuestionSec : settings.timePerQuestionSec,
+      xpPerCorrect: mode === "SURVIVAL" ? settings.survivalXpPerCorrect : mode === "TIMEATTACK" ? settings.attackXpPerCorrect : settings.xpPerCorrect,
+      variant: mode,
+      hearts: mode === "SURVIVAL" ? settings.survivalHearts : 0,
+      durationSec: mode === "TIMEATTACK" ? settings.attackDurationSec : 0,
+      deadlineAt: mode === "TIMEATTACK" ? Date.now() + settings.attackDurationSec * 1000 : 0,
       levelBase: settings.levelBase,
       levelExponent: settings.levelExponent,
       totalQuestions: picked.length,
@@ -297,7 +335,7 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     // État mutable : lectures simples indépendantes, en parallèle (un seul aller-retour vers la base).
     const [game, answers, served] = await Promise.all([
       prisma.game.findFirst({ where: { id: req.params.id, mode: "SOLO", players: { some: { userId } } }, select: { id: true, subjectId: true, status: true } }),
-      prisma.answer.findMany({ where: { userId, gameQuestion: { gameId: req.params.id } }, select: { gameQuestionId: true } }),
+      prisma.answer.findMany({ where: { userId, gameQuestion: { gameId: req.params.id } }, select: { gameQuestionId: true, isCorrect: true } }),
       prisma.gameQuestion.findUnique({ where: { id: body.gameQuestionId }, select: { servedAt: true } }),
       requireMembership(prisma, userId, st.subjectId, ctx.user.role),
     ]);
@@ -314,10 +352,14 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     const servedAt = served?.servedAt;
     if (!servedAt) throw new HttpError(409, "not_served", "Cette question n'a pas encore été affichée");
 
-    const limitMs = cfg.timePerQuestionSec * 1000;
+    const attack = cfg.variant === "TIMEATTACK";
+    const limitMs = attack ? 0 : cfg.timePerQuestionSec * 1000;
     const nowMs = Date.now();
     const elapsed = nowMs - servedAt.getTime();
-    const timedOut = limitMs > 0 && elapsed > limitMs + GRACE_MS;
+    const timedOut = attack
+      ? !!body.timedOut || nowMs > cfg.deadlineAt + GRACE_MS
+      : limitMs > 0 && (elapsed > limitMs + GRACE_MS || !!body.timedOut && elapsed >= limitMs - 1000);
+    const wrongBefore = answers.filter((a) => !a.isCorrect).length;
     const choices = JSON.parse(target.question.choices) as string[];
     if (!timedOut && body.choiceIndex >= choices.length) {
       throw new HttpError(400, "invalid_choice", `choiceIndex doit être compris entre 0 et ${choices.length - 1}`);
@@ -326,7 +368,11 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     const originalChoice = timedOut ? null : toOriginal(order, body.choiceIndex);
     const isCorrect = !timedOut && originalChoice === target.question.answerIndex;
     const idx = all.findIndex((g) => g.id === target.id);
-    const isLast = idx === all.length - 1;
+    const wrongNow = wrongBefore + (isCorrect ? 0 : 1);
+    const isLast =
+      idx === all.length - 1 ||
+      (cfg.variant === "SURVIVAL" && wrongNow >= cfg.hearts) ||
+      (attack && nowMs >= cfg.deadlineAt);
     const upcoming = isLast ? null : all[idx + 1];
     const membershipKey = { userId_subjectId: { userId, subjectId: game.subjectId } };
     const gained = isCorrect ? cfg.xpPerCorrect : 0;
@@ -369,9 +415,12 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
           total: all.length,
           text: upcoming.question.text,
           choices: shownChoices(upcoming.id, userId, upcoming.question.choices, cfg),
-          timeLimitSec: cfg.timePerQuestionSec,
+          timeLimitSec: attack ? cfg.durationSec : cfg.timePerQuestionSec,
           // Le chrono de la suivante démarre quand le joueur l'affiche : le client appelle GET /current à ce moment-là.
-          remainingMs: limitMs > 0 ? limitMs : null,
+          remainingMs: attack ? Math.max(0, cfg.deadlineAt - nowMs) : limitMs > 0 ? limitMs : null,
+          variant: cfg.variant,
+          hearts: heartsLeft(cfg, wrongNow),
+          heartsMax: cfg.variant === "SURVIVAL" ? cfg.hearts : undefined,
         }
       : null;
     return {
@@ -384,6 +433,7 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
       level: after,
       leveledUp: after.level > before.level,
       finished: isLast,
+      hearts: heartsLeft(cfg, wrongNow),
       next: nextQuestion,
       newBadges: isLast ? await newBadgesSafe(prisma, userId, timezone) : [],
     };
@@ -402,8 +452,13 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
   app.get<{ Params: { id: string } }>("/api/solo/:id/result", async (req) => {
     const ctx = await auth(req);
     const game = await loadOwnGame(prisma, ctx.user.id, req.params.id);
-    if (game.status === "IN_PROGRESS") throw new HttpError(409, "game_in_progress", "La partie n'est pas terminée");
     const cfg = parseConfig(game.config);
+    // Course contre la montre : une fois le temps écoulé, la partie se clôt d'elle-même au premier regard sur le résultat.
+    if (game.status === "IN_PROGRESS" && cfg.variant === "TIMEATTACK" && Date.now() > cfg.deadlineAt + GRACE_MS) {
+      await finishGame(prisma, game.id);
+      game.status = "FINISHED";
+    }
+    if (game.status === "IN_PROGRESS") throw new HttpError(409, "game_in_progress", "La partie n'est pas terminée");
 
     const [player, membership, questions] = await Promise.all([
       prisma.gamePlayer.findUniqueOrThrow({ where: { gameId_userId: { gameId: game.id, userId: ctx.user.id } } }),
@@ -437,10 +492,12 @@ export function registerSoloRoutes(app: FastifyInstance, { prisma, auth, timezon
     const levelNow = levelOf(membership.xp, cfg);
     return {
       status: game.status,
+      variant: cfg.variant,
+      hearts: cfg.variant === "SURVIVAL" ? cfg.hearts : undefined,
       chapter: game.rounds[0]?.chapter ?? null,
       correct: player.correctCount,
       answered: review.length,
-      total: cfg.totalQuestions,
+      total: cfg.variant === "TIMEATTACK" ? review.length : cfg.totalQuestions,
       xpEarned: player.xpEarned,
       totalXp: membership.xp,
       level: levelNow,

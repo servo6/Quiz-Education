@@ -201,6 +201,10 @@ async function expireIfDue(prisma: PrismaClient, game: FullGame): Promise<boolea
 
 // ───────────── Vues ─────────────
 
+function parseAvatar(raw: string | null): unknown {
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
 function summary(game: FullGame, userId: string) {
   const cfg = parseCfg(game.config);
   const oppId = otherOf(cfg, userId);
@@ -211,7 +215,7 @@ function summary(game: FullGame, userId: string) {
     id: game.id,
     subjectId: game.subjectId,
     status: game.status,
-    opponent: { id: oppId, username: opp.user.username },
+    opponent: { id: oppId, username: opp.user.username, avatar: parseAvatar(opp.user.avatar) },
     challenger: cfg.challengerId === userId,
     deadlineAt: cfg.deadlineAt,
     rounds: cfg.rounds,

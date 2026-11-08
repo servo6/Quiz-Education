@@ -1,3 +1,4 @@
+import { parseAvatar } from "../avatar.ts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { loadSubject } from "../access.ts";
@@ -111,13 +112,13 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
     const effective = await loadEffectiveSettings(prisma, subject.settings, subject.organizationId);
     const managers = await prisma.subjectManager.findMany({
       where: { subjectId: subject.id },
-      select: { user: { select: { id: true, username: true } } },
+      select: { user: { select: { id: true, username: true, avatar: true } } },
     });
     return {
       subject: { id: subject.id, name: subject.name, organizationId: subject.organizationId, accessName: subject.accessName },
       overrides,
       settings: effective,
-      managers: managers.map((m) => m.user),
+      managers: managers.map((m) => ({ ...m.user, avatar: parseAvatar(m.user.avatar) })),
     };
   });
 
@@ -263,11 +264,12 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
       orderBy: [{ username: "asc" }, { id: "asc" }],
       take: q.limit + 1,
       ...(q.cursor ? { cursor: { id: q.cursor }, skip: 1 } : {}),
-      select: { id: true, username: true, email: true, emailVerifiedAt: true, verifyDeadline: true, role: true, bannedAt: true, createdAt: true, _count: { select: { memberships: true } } },
+      select: { id: true, username: true, avatar: true, email: true, emailVerifiedAt: true, verifyDeadline: true, role: true, bannedAt: true, deactivatedAt: true, createdAt: true, _count: { select: { memberships: true } },
+        orgMemberships: { where: { revokedAt: null }, select: { organization: { select: { name: true } } } }, adminOrgs: { select: { organization: { select: { name: true } } } } },
     });
     const page = rows.slice(0, q.limit);
     return {
-      users: page.map(({ _count, bannedAt, emailVerifiedAt, ...u }) => ({ ...u, emailVerified: !!emailVerifiedAt, overdue: verificationOverdue({ role: u.role, emailVerifiedAt, verifyDeadline: u.verifyDeadline }), banned: !!bannedAt, subjectCount: _count.memberships })),
+      users: page.map(({ _count, bannedAt, deactivatedAt, emailVerifiedAt, orgMemberships, adminOrgs, ...u }) => ({ ...u, avatar: parseAvatar(u.avatar), organizations: [...new Set([...adminOrgs, ...orgMemberships].map((o) => o.organization.name))].sort((a, b) => a.localeCompare(b)), deactivated: !!deactivatedAt, emailVerified: !!emailVerifiedAt, overdue: verificationOverdue({ role: u.role, emailVerifiedAt, verifyDeadline: u.verifyDeadline }), banned: !!bannedAt, subjectCount: _count.memberships })),
       nextCursor: rows.length > q.limit ? page[page.length - 1].id : null,
     };
   });

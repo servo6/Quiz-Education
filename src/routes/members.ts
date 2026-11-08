@@ -1,3 +1,4 @@
+import { parseAvatar } from "../avatar.ts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { assertAccountInReach } from "../accountScope.ts";
@@ -31,12 +32,13 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
       },
       orderBy: [{ revokedAt: { sort: "asc", nulls: "first" } }, { xp: "desc" }],
       take: 500,
-      include: { user: { select: { id: true, username: true, role: true, bannedAt: true, createdAt: true } } },
+      include: { user: { select: { id: true, username: true, avatar: true, role: true, bannedAt: true, createdAt: true } } },
     });
     return {
       members: rows.map((m) => ({
         userId: m.user.id,
         username: m.user.username,
+        avatar: parseAvatar(m.user.avatar),
         role: m.user.role,
         xp: m.xp,
         level: levelFromXp(m.xp, { base: settings.levelBase, exponent: settings.levelExponent }).level,
@@ -118,7 +120,7 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
     const u = await targetUser(req.params.id);
     await assertAccountInReach(prisma, ctx, u);
     if (!u.bannedAt) throw new HttpError(409, "not_banned", "Ce compte n'est pas suspendu");
-    await prisma.user.update({ where: { id: u.id }, data: { bannedAt: null } });
+    await prisma.user.update({ where: { id: u.id }, data: { bannedAt: null, deactivatedAt: null } });
     await logAction(prisma, ctx.user.id, null, "UNBAN_USER", { userId: u.id, username: u.username });
     return { ok: true };
   });

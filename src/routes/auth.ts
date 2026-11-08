@@ -79,7 +79,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     const user = await prisma.user.findUnique({ where: username.includes("@") ? { email: username } : { username } });
     const ok = user ? await verifyPassword(password, user.passwordHash) : await fakeVerify(password);
     if (!user || !ok) throw new HttpError(401, "bad_credentials", "Pseudo (ou e-mail) ou mot de passe incorrect");
-    if (user.bannedAt) throw new HttpError(403, "banned", "Ce compte est suspendu");
+    if (user.bannedAt) throw new HttpError(403, "banned", user.deactivatedAt ? "Ce compte a été désactivé. Contacte un administrateur pour le réactiver." : "Ce compte est suspendu");
     if (verificationOverdue(user)) throw new HttpError(403, "verification_overdue", "Délai de vérification de l'adresse e-mail dépassé : le compte est suspendu. Contacte le super administrateur.");
     startSession(reply, user.id);
     return { user: { id: user.id, username: user.username, role: user.role } };
@@ -105,7 +105,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
       const orgIds = user.role === "ADMIN" ? null : user.role === "ORG_ADMIN" ? [...(actor.adminOrgIds ?? [])] : [...new Set(list.map((x) => x.organizationId))];
       const orgs = await prisma.organization.findMany({ where: orgIds ? { id: { in: orgIds } } : {}, orderBy: { name: "asc" }, select: { id: true, name: true } });
       return {
-        user: { id: user.id, username: user.username, email: user.email, emailVerified: !!user.emailVerifiedAt, verifyDeadline: user.emailVerifiedAt ? null : user.verifyDeadline, role: user.role, activeSubjectId: user.activeSubjectId, avatar: null },
+        user: { id: user.id, username: user.username, email: user.email, emailVerified: !!user.emailVerifiedAt, verifyDeadline: user.emailVerifiedAt ? null : user.verifyDeadline, role: user.role, activeSubjectId: user.activeSubjectId, avatar: parseAvatar(user.avatar) },
         themeDefault: await defaultTheme(prisma, user, actor),
         managedSubjectIds: list.map((x) => x.id),
         adminOrgIds: user.role === "ORG_ADMIN" ? orgs.map((o) => o.id) : [],

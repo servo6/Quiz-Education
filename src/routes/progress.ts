@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { requireMembership } from "../access.ts";
-import { AVATAR_CATEGORIES, LOOK_KEY, LOOK_MAX_KEYS, LOOK_VALUE, lockedLook, lockReason, parseAvatar, unlockContext, UNLOCK_TYPES, type AvatarCategory } from "../avatar.ts";
+import { AVATAR_CATEGORIES, LOOK_KEY, LOOK_MAX_KEYS, LOOK_VALUE, loadLookLocks, saveLookLocks, LOOK_LOCKS, lockedLook, lockReason, parseAvatar, unlockContext, UNLOCK_TYPES, type AvatarCategory } from "../avatar.ts";
 import { logAction } from "../audit.ts";
 import type { Deps } from "../auth.ts";
 import { BADGE_TYPES, evaluateBadges } from "../badges.ts";
@@ -151,10 +151,10 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
   // ───────────── Avatar ─────────────
   app.get("/api/avatar/items", async (req) => {
     const ctx = await auth(req);
-    const [items, unlock] = await Promise.all([prisma.avatarItem.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }), unlockContext(prisma, ctx.user.id)]);
+    const [items, unlock, locks] = await Promise.all([prisma.avatarItem.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }), unlockContext(prisma, ctx.user.id, ctx.actor.role !== "USER"), loadLookLocks(prisma)]);
     return {
       avatar: parseAvatar(ctx.user.avatar),
-      lookLocks: lockedLook(unlock),
+      lookLocks: lockedLook(unlock, locks),
       items: items.map((i) => {
         const reason = lockReason(i, unlock);
         return { ...i, unlocked: reason === null, lockReason: reason };
@@ -163,9 +163,9 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
   });
   app.put("/api/me/avatar", async (req) => {
     const ctx = await auth(req);
-    if (ctx.actor.role !== "USER") throw new HttpError(403, "admin_cannot_play", "Un administrateur ne joue pas : il gère la plateforme");
     const body = AvatarBody.parse(req.body);
-    const unlock = await unlockContext(prisma, ctx.user.id);
+    // Les comptes de gestion personnalisent leur avatar sans aucune restriction.
+    const unlock = await unlockContext(prisma, ctx.user.id, ctx.actor.role !== "USER");
     const items: Partial<Record<AvatarCategory, string>> = {};
     for (const [category, id] of Object.entries(body.items) as Array<[AvatarCategory, string | null]>) {
       if (id === null) continue;
@@ -175,7 +175,7 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
       if (reason) throw new HttpError(403, "avatar_item_locked", reason, { itemId: id });
       items[category] = id;
     }
-    const locks = lockedLook(unlock);
+    const locks = lockedLook(unlock, await loadLookLocks(prisma));
     for (const [key, value] of Object.entries(body.look)) {
       const reason = locks[`${key}:${value}`];
       if (reason) throw new HttpError(403, "avatar_item_locked", reason, { itemId: `${key}:${value}` });
@@ -183,6 +183,36 @@ export function registerProgressRoutes(app: FastifyInstance, { prisma, auth, tim
     const avatar = { items, colors: body.colors, look: body.look };
     await prisma.user.update({ where: { id: ctx.user.id }, data: { avatar: JSON.stringify(avatar) } });
     return { avatar };
+  });
+  // Règles de déblocage des options de l'avatar intégré (visage, coiffure, tenue…), réglées par l'administrateur
+  const LockRule = z.object({ unlockType: z.enum(UNLOCK_TYPES), unlockValue: z.string().trim().max(60).nullable().default(null) });
+  const LocksBody = z.object({ locks: z.record(z.string().regex(/^[a-z]{2,16}:[a-z0-9-]{1,24}$/), LockRule).refine((o) => Object.keys(o).length <= 400, "trop de règles") });
+  app.get("/api/avatar/look-locks", async (req) => {
+    const ctx = await auth(req);
+    assertCan(ctx.actor, "avatars:manage");
+    return { locks: await loadLookLocks(prisma), defaults: LOOK_LOCKS };
+  });
+  app.put("/api/avatar/look-locks", async (req) => {
+    const ctx = await auth(req);
+    assertCan(ctx.actor, "avatars:manage");
+    const body = LocksBody.parse(req.body);
+    const clean: Record<string, { unlockType: string; unlockValue: string | null }> = {};
+    for (const [k, v] of Object.entries(body.locks)) {
+      if (v.unlockType === "FREE") continue;
+      if (!v.unlockValue) throw new HttpError(422, "missing_unlock_value", `Précise la condition pour « ${k} »`);
+      if (v.unlockType === "LEVEL" && !(Number(v.unlockValue) >= 1)) throw new HttpError(422, "bad_level", `Niveau invalide pour « ${k} »`);
+      clean[k] = v;
+    }
+    await saveLookLocks(prisma, clean);
+    await logAction(prisma, ctx.user.id, null, "UPDATE_AVATAR_LOCKS", { count: Object.keys(clean).length });
+    return { locks: clean };
+  });
+  app.delete("/api/avatar/look-locks", async (req) => {
+    const ctx = await auth(req);
+    assertCan(ctx.actor, "avatars:manage");
+    await saveLookLocks(prisma, null);
+    await logAction(prisma, ctx.user.id, null, "RESET_AVATAR_LOCKS");
+    return { locks: LOOK_LOCKS };
   });
   const adminItemPatch = AvatarItemBody.partial().strict();
   app.post("/api/avatar/items", async (req, reply) => {

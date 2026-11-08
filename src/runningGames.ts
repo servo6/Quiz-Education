@@ -26,6 +26,7 @@ export async function applyTimeToRunningGames(prisma: PrismaClient, subjectId: s
     }
     try {
       const cfg = JSON.parse(g.config) as Record<string, unknown>;
+      if (cfg.variant && cfg.variant !== "ADVENTURE") continue; // survie / contre-la-montre : réglages propres
       if (cfg.timePerQuestionSec === t) continue;
       cfg.timePerQuestionSec = t;
       await prisma.game.update({ where: { id: g.id }, data: { config: JSON.stringify(cfg) } });

@@ -3,6 +3,7 @@ import { S, activeSubject, loadCatalog, loadMe, rerender } from "../state.js";
 import { personalThemeSection } from "./appearance.js";
 import { emailSection } from "./email.js";
 import { appSection } from "./appShare.js";
+import { pushSection } from "./pushSection.js";
 import { editAvatar } from "./avatarEditor.js";
 
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
@@ -42,6 +43,7 @@ export async function profileView() {
         h("span.muted.small", b.earned ? b.description : `${Math.min(b.current ?? 0, b.threshold ?? 0)} / ${b.threshold ?? "?"}`))))),
     personalThemeSection(),
     appSection(),
+    pushSection(),
     emailSection(),
     h("section.stack.tight", h("h2", "Compte"),
       h("div.row.wrap",
@@ -66,19 +68,37 @@ export function passwordSheet() {
 const ROLE_LABEL = { ADMIN: "Super administrateur", ORG_ADMIN: "Administrateur d'organisation", SUBJECT_MANAGER: "Responsable de matière" };
 /** Profil d'un compte de gestion (administrateur, administrateur d'organisation, responsable). */
 export async function staffProfileView(logout) {
+  await loadCatalog().catch(() => null);
   const me = S.me;
   const orgs = me.organizations ?? [];
   return h("div.stack",
     h("div.admin-head", h("h1", "Mon profil")),
     h("section.card.stack",
-      h("div.row", h("span.initial", { style: "width:48px;height:48px;font-size:1.3rem" }, me.user.username.slice(0, 1).toUpperCase()),
-        h("div", h("strong", me.user.username), h("div.muted", ROLE_LABEL[me.user.role] ?? ""))),
+      h("div.row", { style: "gap:14px" }, h("div", avatarEl(me.user.avatar ?? null, S.catalog, 72)),
+        h("div.grow", h("strong", me.user.username), h("div.muted", ROLE_LABEL[me.user.role] ?? "")),
+        h("button.btn.small", { onclick: () => editAvatar(S.catalog, () => rerender()) }, "Mon avatar")),
       me.user.role !== "ADMIN" && orgs.length ? h("div.muted.small", `Organisation${orgs.length > 1 ? "s" : ""} : ${orgs.map((o) => o.name).join(", ")}`) : null,
       me.user.role === "SUBJECT_MANAGER" && me.subjects.length ? h("div.muted.small", `Matière${me.subjects.length > 1 ? "s" : ""} gérée${me.subjects.length > 1 ? "s" : ""} : ${me.subjects.map((s) => s.name).join(", ")}`) : null),
     appSection(),
+    pushSection(),
     emailSection(),
     h("section.stack.tight", h("h2", "Compte"),
       h("div.row.wrap",
         h("button.btn", { onclick: passwordSheet }, "Changer le mot de passe"),
-        h("button.btn.ghost", { onclick: logout }, "Se déconnecter"))));
+        h("button.btn.ghost", { onclick: logout }, "Se déconnecter")),
+      me.user.role === "USER" ? h("div.stack.tight", h("p.muted.small", "Tu peux désactiver ton compte : tu ne pourras plus te connecter et tu disparaîtras des classements. Tes données ne sont pas supprimées et un administrateur peut rétablir le compte."),
+        h("div", h("button.btn.danger", { onclick: deactivateSheet }, "Désactiver mon compte"))) : null));
+}
+
+function deactivateSheet() {
+  sheet("Désactiver mon compte", (close) => h("form.stack", {
+    onsubmit: async (e) => {
+      e.preventDefault();
+      const pw = e.target.elements.pw.value;
+      if (!confirm("Désactiver définitivement l'accès à ton compte ?")) return;
+      try { await post("/api/me/deactivate", { password: pw }); close(); S.me = null; S.summary = null; toast("Compte désactivé"); rerender(); } catch (ex) { fail(ex); }
+    },
+  }, h("p", "Tes duels en cours seront perdus et tu seras déconnecté. Entre ton mot de passe pour confirmer."),
+    h("input.input", { name: "pw", type: "password", autocomplete: "current-password", placeholder: "Mot de passe", required: true, "aria-label": "Mot de passe" }),
+    h("button.btn.danger.block", { type: "submit" }, "Désactiver mon compte")));
 }

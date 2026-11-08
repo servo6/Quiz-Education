@@ -3,6 +3,7 @@ import { buildApp } from "./app.ts";
 import { createMailer } from "./mailer.ts";
 import { ensureAdmin } from "./bootstrap.ts";
 import { loadEnv } from "./config.ts";
+import { createPusher } from "./push.ts";
 import { createPrisma } from "./db.ts";
 import { ensureDefaultAvatarItems } from "./avatar.ts";
 import { ensureDefaultBadges } from "./badges.ts";
@@ -64,6 +65,7 @@ const app = await buildApp({
   staticDir: "public",
   appUrl: env.APP_URL,
   mailer,
+  pusher: createPusher(prisma, { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT }),
 });
 
 if (!mailer.configured) {

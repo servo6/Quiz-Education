@@ -63,7 +63,7 @@ export function makeAuth(prisma: PrismaClient, useCache = false) {
       hit = { at: Date.now(), user: plain as User, managed: managedSubjects.map((m) => m.subjectId), adminOrgs: orgIds, orgSubjects: orgSubjects.map((x) => x.id) };
       if (useCache) authCache.set(sub, hit);
     }
-    if (hit.user.bannedAt) throw new HttpError(403, "banned", "Ce compte est suspendu");
+    if (hit.user.bannedAt) throw new HttpError(403, "banned", hit.user.deactivatedAt ? "Ce compte a été désactivé" : "Ce compte est suspendu");
     if (verificationOverdue(hit.user)) throw new HttpError(403, "verification_overdue", "Délai de vérification de l'adresse e-mail dépassé : le compte est suspendu. Contacte le super administrateur.");
     return {
       user: hit.user,

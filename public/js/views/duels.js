@@ -3,49 +3,86 @@ import { S, activeSubject, go, lvl, refreshSummary, loadCatalog } from "../state
 import { playStage } from "../stage.js";
 import { challengeLive } from "../live.js";
 import { avatarEl } from "../lib.js";
+import { shareButton } from "../shareResult.js";
+import { roomCard } from "../rooms.js";
 import { ticketRow, spendTicket, loadTickets } from "../tickets.js";
 
-const initial = (name) => h("span.initial", (name ?? "?").slice(0, 1).toUpperCase());
 const RESULT = { WIN: ["Victoire", "good"], DRAW: ["Égalité", "amber"], LOSS: ["Défaite", "bad"], FORFEIT: ["Forfait", "bad"] };
 
+let duelsTab = "cours";
+const scoreOf = (a, b) => {
+  const tone = (x, y) => (x > y ? "win" : x < y ? "lose" : "tie");
+  return h("div.dscore", h("b", { class: tone(a, b) }, String(a)), h("i", "–"), h("b", { class: tone(b, a) }, String(b)));
+};
 // ───────── Liste ─────────
 export async function duelsView() {
   const sub = activeSubject();
-  const [{ duels }, tix] = await Promise.all([get(`/api/subjects/${sub.id}/duels`), loadTickets(sub.id)]);
+  const [{ duels }, tix] = await Promise.all([get(`/api/subjects/${sub.id}/duels`), loadTickets(sub.id), loadCatalog().catch(() => null)]);
   refreshSummary();
   const active = duels.filter((d) => d.status === "IN_PROGRESS");
   const mine = active.filter((d) => d.yourTurn);
   const waiting = active.filter((d) => !d.yourTurn);
   const done = duels.filter((d) => d.status !== "IN_PROGRESS");
 
-  const row = (d) => h("a.item", { href: `#/duels/${d.id}` },
-    initial(d.opponent.username),
-    h("div.grow", h("strong", d.opponent.username),
-      h("div.muted.small", d.status === "IN_PROGRESS" ? `${statusText(d)} · ${liveScore(d)}` : resultText(d))),
-    d.status === "IN_PROGRESS"
-      ? h("span.chip", { class: d.yourTurn ? "amber" : "" }, d.yourTurn ? "À toi" : `fin dans ${timeLeft(d.deadlineAt)}`)
-      : h("span.chip", { class: RESULT[d.result]?.[1] ?? "" }, RESULT[d.result]?.[0] ?? "Terminé"));
-  const section = (title, list) => list.length ? h("section.stack.tight", h("h2", title), h("div.list", list.map(row))) : null;
+  // ── Présentation « duel » : deux onglets, cartes avec avatars, scores colorés (vert = devant, rouge = derrière).
+  const me = S.me.user;
+  const tone = (a, b) => (a > b ? "win" : a < b ? "lose" : "tie");
+  const scoreEl = (a, b) => h("div.dscore", h("b", { class: tone(a, b) }, String(a)), h("i", "–"), h("b", { class: tone(b, a) }, String(b)));
+  const side = (u, cls) => h("div.dside", { class: cls }, h("div.dav", avatarEl(u?.avatar ?? null, S.catalog, 44)), h("span.dname", u?.username ?? "?"));
+  const sofar = (d) => d.score.opponent ?? d.score.opponentSoFar ?? 0;
+  const roundOf = (d) => d.next?.round ?? null;
+  // Mes duels en cours où c'est à moi : cartes défilantes.
+  const turnCard = (d) => h("a.dcard", { href: `#/duels/${d.id}` },
+    h("div.dav.big", avatarEl(d.opponent.avatar ?? null, S.catalog, 76)),
+    h("strong.dname", d.opponent.username),
+    scoreEl(d.score.you, sofar(d)),
+    h("span.btn.primary.block", d.next.action === "pick" ? `Choisir la manche ${d.next.round}` : `Jouer la manche ${d.next.round}`));
+  // Ligne « face à face » : adversaire à gauche, moi à droite.
+  const versusRow = (d, under, extra) => h("a.drow", { href: `#/duels/${d.id}` },
+    side(d.opponent, "left"),
+    h("div.dmid", scoreEl(sofar(d), d.score.you), under),
+    side(me, "right"), extra ?? null);
+  const waitingRow = (d) => versusRow(d, h("span.dsub", `${roundOf(d) ? `Manche ${roundOf(d)} · ` : ""}fin dans ${timeLeft(d.deadlineAt)}`));
   const doneRow = (d) => {
-    const r = h("div.item.hist", h("a.item-link", { href: `#/duels/${d.id}` }, initial(d.opponent.username),
-      h("div.grow", h("strong", d.opponent.username), h("div.muted.small", resultText(d)))),
-      h("span.chip", { class: RESULT[d.result]?.[1] ?? "" }, RESULT[d.result]?.[0] ?? "Terminé"),
-      h("button.btn.ghost.small.x", { "aria-label": "Supprimer ce duel de l'historique", onclick: async () => {
-        try { await del(`/api/games/${d.id}`); r.remove(); } catch (e) { fail(e); }
-      } }, "✕"));
+    const [label, color] = RESULT[d.result] ?? ["Terminé", ""];
+    const x = h("button.dx", { type: "button", "aria-label": "Supprimer ce duel de l'historique", onclick: async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { await del(`/api/games/${d.id}`); r.remove(); } catch (er) { fail(er); }
+    } }, "✕");
+    const r = h("div.dwrap", versusRow(d, h("span.dres", { class: color }, label)), x);
     return r;
   };
-  const doneBox = done.length ? h("section.stack.tight", h("div.row.between", h("h2", "Terminés"),
+  const list = (rows) => h("div.dlist", rows);
+  const section = (title, node) => (node ? h("section.stack.tight", h("h2", title), node) : null);
+
+  const turnBox = mine.length ? h("div.hscroll", mine.map(turnCard)) : null;
+  const waitBox = waiting.length ? list(waiting.map(waitingRow)) : null;
+  const progressPane = h("div.stack",
+    section("À toi de jouer", turnBox), section("Parties en attente", waitBox),
+    !mine.length && !waiting.length ? h("div.empty", icon("duel"), h("a.btn.primary", { href: "#/duels/new" }, "Défier un camarade")) : null);
+  const doneBox = done.length ? h("section.stack.tight", h("div.row.between", h("h2", "Jouées récemment"),
     h("button.btn.ghost.small", { onclick: async () => {
       if (!confirm("Effacer tout l'historique des duels ? Tes statistiques et ton XP restent acquis.")) return;
-      try { await del(`/api/subjects/${sub.id}/history?mode=duel`); doneBox.remove(); } catch (e) { fail(e); }
-    } }, "Tout effacer")), h("div.list", done.slice(0, 15).map(doneRow))) : null;
+      try { await del(`/api/subjects/${sub.id}/history?mode=duel`); donePane.replaceChildren(h("p.muted", "Aucune partie terminée.")); } catch (e) { fail(e); }
+    } }, "Tout effacer")), list(done.slice(0, 30).map(doneRow))) : null;
+  const donePane = h("div.stack", doneBox ?? h("p.muted", "Aucune partie terminée."));
+  const tabs = [["cours", `Parties en cours${mine.length ? ` (${mine.length})` : ""}`, progressPane], ["finies", "Parties terminées", donePane]];
+  const tabBtns = tabs.map(([id, label, pane]) => h("button", { type: "button", role: "tab", "aria-selected": String(id === duelsTab), onclick: () => {
+    duelsTab = id; tabBtns.forEach((b, i) => b.setAttribute("aria-selected", String(tabs[i][0] === id))); tabs.forEach(([k,, pn]) => (pn.hidden = k !== id));
+  } }, label));
+  tabs.forEach(([k,, pn]) => (pn.hidden = k !== duelsTab));
+  const tabsBar = h("div.dtabs", { role: "tablist" }, tabBtns);
 
+  const roomHist = await get(`/api/subjects/${sub.id}/rooms`).then((r) => r.rooms).catch(() => []);
   return h("div.stack",
     h("div.row.between", h("h1", "Duels"), h("a.btn.primary", { href: "#/duels/new" }, "Nouveau duel")),
+    roomCard(sub.id),
+    roomHist.length ? h("section.stack.tight", h("h2", "Derniers salons"), h("div.list", roomHist.slice(0, 5).map((r) => h("div.item",
+      h("span.chip", { class: r.rank === 1 ? "amber" : "" }, r.rank === 1 ? "🥇" : `${r.rank}e`),
+      h("div.grow", h("strong", `Salon ${r.code}`), h("div.muted.small", `${r.players} joueurs · ${r.score} pts · ${r.correct}/${r.size} bonnes réponses`)),
+      r.coinsEarned ? h("span.chip", `+${r.coinsEarned} 🪙`) : null)))) : null,
     tix ? h("div.tickets-bar", ticketRow("duel", tix.duel.left, tix.duel.total, { big: true }), ticketRow("live", null, null, { big: true })) : null,
-    duels.length === 0 ? h("div.empty", icon("duel"), h("a.btn.primary", { href: "#/duels/new" }, "Défier un camarade")) : null,
-    section("À ton tour", mine), section("En attente de l'adversaire", waiting), doneBox);
+    tabsBar, progressPane, donePane);
 }
 function statusText(d) {
   const n = d.next;
@@ -63,6 +100,7 @@ export async function duelNewView() {
     get(`/api/subjects/${sub.id}/chapters`),
     get(`/api/subjects/${sub.id}/players`),
     loadTickets(sub.id),
+    loadCatalog().catch(() => null),
   ]);
   const tixDuel = tix ? ticketRow("duel", tix.duel.left, tix.duel.total, { big: true }) : null;
   const usable = ch.chapters.filter((c) => c.questionCount > 0);
@@ -85,13 +123,13 @@ export async function duelNewView() {
   function paint(players) {
     playersBox.replaceChildren(...(players.length ? players.map((p) => h("button.item", {
       onclick: () => create(() => post("/api/duels", { subjectId: sub.id, opponentId: p.id, chapterId: chosen.id })),
-    }, initial(p.username), h("div.grow", h("strong", p.username), h("div.muted.small", `Niveau ${lvl(p.level)}`)),
+    }, h("span.dav", avatarEl(p.avatar ?? null, S.catalog, 44)), h("div.grow", h("strong", p.username), h("div.muted.small", `Niveau ${lvl(p.level)}`)),
       p.online ? h("span.chip.good.dot", "en ligne") : null)) : [h("p.muted", "Aucun joueur trouvé.")]));
   }
   paint(pl.players);
   const online = pl.players.filter((p) => p.online && !p.busy);
   const liveBox = h("section.card.stack", h("div.row.between", h("h2", "En ligne"), ticketRow("live", null, null)),
-    online.length ? h("div.list", online.map((p) => h("button.item", { onclick: () => challengeLive(sub.id, p) }, initial(p.username),
+    online.length ? h("div.list", online.map((p) => h("button.item", { onclick: () => challengeLive(sub.id, p) }, h("span.dav", avatarEl(p.avatar ?? null, S.catalog, 44)),
       h("div.grow", h("strong", p.username), h("div.muted.small", `Niveau ${lvl(p.level)}`)), h("span.chip.good.dot", "en ligne")))) : h("p.muted", "Personne en ligne"));
 
   // Deux modes distincts : le duel différé (chacun joue à son rythme) et le duel en direct (les deux en même temps).
@@ -120,7 +158,7 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
 // ───────── Détail ─────────
 export async function duelDetailView({ id }) {
-  const d = await get(`/api/duels/${id}`);
+  const [d] = await Promise.all([get(`/api/duels/${id}`), loadCatalog().catch(() => null)]);
   const duel = d.duel;
   if (duel.status !== "IN_PROGRESS") { go(`/duels/${id}/result`); return h("div"); }
   const me = S.me.user.username;
@@ -143,9 +181,9 @@ export async function duelDetailView({ id }) {
     h("a.muted", { href: "#/duels" }, "← Mes duels"),
     h("section.card.stack",
       h("div.vs",
-        h("div", initial(me), h("div", me)),
+        h("div", h("span.dav.big", avatarEl(S.me.user.avatar ?? null, S.catalog, 64)), h("div", me)),
         h("div.score", `${duel.score.you} – ${duel.score.opponent ?? duel.score.opponentSoFar ?? 0}`),
-        h("div", initial(duel.opponent.username), h("div", duel.opponent.username))),
+        h("div", h("span.dav.big", avatarEl(duel.opponent.avatar ?? null, S.catalog, 64)), h("div", duel.opponent.username))),
       h("div.center", h("span.chip", `⏳ ${timeLeft(duel.deadlineAt)}`))),
     h("section.card.stack", { class: n.action === "wait" ? "" : "state-play" }, action),
     h("section.stack.tight", h("h2", `Manches (${duel.rounds})`),
@@ -186,7 +224,7 @@ export async function duelPlayView({ id }, ctx) {
 // ───────── Résultat ─────────
 export async function duelResultView({ id }) {
   const sub = activeSubject();
-  const r = await get(`/api/duels/${id}/result`);
+  const [r] = await Promise.all([get(`/api/duels/${id}/result`), loadCatalog().catch(() => null)]);
   const duel = r.duel;
   if (duel.status === "IN_PROGRESS") { go(`/duels/${id}`); return h("div"); }
   const [label, kind] = RESULT[r.result] ?? ["Terminé", ""];
@@ -196,13 +234,15 @@ export async function duelResultView({ id }) {
   return h("div.stack",
     h("a.muted", { href: "#/duels" }, "← Mes duels"),
     h("section.card.center.stack",
-      h("span.chip", { class: kind }, label),
-      h("div.result-score", `${duel.score.you} – ${duel.score.opponent ?? 0}`),
-      h("div.muted", `${me} contre ${opp}`),
+      h("div.rvs",
+        h("div.dside.left", h("span.dav.big", avatarEl(S.me.user.avatar ?? null, S.catalog, 76)), h("span.dname", me)),
+        h("div.dmid", scoreOf(duel.score.you, duel.score.opponent ?? 0), h("span.dres", { class: kind }, label)),
+        h("div.dside.right", h("span.dav.big", avatarEl(duel.opponent.avatar ?? null, S.catalog, 76)), h("span.dname", opp))),
       h("div", h("span.chip.amber", `+${r.xpEarned} XP`), " ", h("span.chip", `Niveau ${lvl(r.level)}`)),
       duel.status === "ABANDONED" ? h("p.muted.small", "Duel abandonné sans réponse : aucun XP.") : null),
     h("div.row.wrap",
       h("button.btn.primary.grow", { onclick: () => rematch(id, sub) }, "Revanche"),
+      shareButton({ kind: "Duel", title: `${me} contre ${opp}`, big: `${duel.score.you} – ${duel.score.opponent ?? 0}`, sub: label, chips: [`+${r.xpEarned} XP`, `Niveau ${lvl(r.level)}`], footer: r.result === "WIN" ? "Viens me défier !" : "Revanche ?" }),
       h("a.btn.ghost.grow", { href: "#/duels" }, "Mes duels")),
     h("h2", "Correction"),
     h("div.review", r.review.map((q) =>

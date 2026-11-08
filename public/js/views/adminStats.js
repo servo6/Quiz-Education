@@ -79,7 +79,7 @@ export async function statsPanel(sub) {
           h("div", h("strong.small", "Nouveaux membres par jour"), barChart({ bars: data.series.map((d, i) => ({ label: labels[i], parts: [{ value: d.newMembers, cls: "c-accent", name: "Nouveaux membres" }] })), height: 150, ariaLabel: "Nouveaux membres" })))),
 
       h("section.card.stack",
-        h("div.row.between.wrap", h("h2", `Joueurs (${rows.length})`), search),
+        h("div.row.between.wrap", h("h2", `Joueurs (${rows.length})`), h("div.row", search, h("button.btn.ghost.small", { type: "button", onclick: () => exportCsv(rows, sub) }, "Exporter en CSV"))),
         rows.length ? h("div.table-wrap", h("table.data",
           h("thead", h("tr", COLUMNS.map(([key, label, , num]) => h("th", { class: num ? "num" : "", "aria-sort": sort.key === key ? (sort.dir === 1 ? "ascending" : "descending") : null, tabindex: 0, onclick: () => { sort = { key, dir: sort.key === key ? -sort.dir : key === "username" ? 1 : -1 }; paint(); }, onkeydown: (e) => { if (e.key === "Enter") e.currentTarget.click(); } },
             label + (sort.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : ""))))),
@@ -87,6 +87,8 @@ export async function statsPanel(sub) {
             COLUMNS.map(([key, , , num]) => h("td", { class: num ? "num" : "" }, key === "username"
               ? h("div.row", { style: "gap:10px;align-items:center" }, avatarEl(p.avatar, cat, 28), h("strong", p.username))
               : (cell[key] ? cell[key](p) : String(p[key] ?? "–"))))))))) : h("p.muted", "Aucun joueur ne correspond.")),
+
+      watchList(data.players, openPlayer),
 
       h("div.grid-2",
         h("section.card.stack", h("h2", "Difficulté par chapitre"),
@@ -123,4 +125,36 @@ export async function chatPanel() {
   }
   paint();
   return root;
+}
+
+const DAY_MS = 86_400_000;
+/** Élèves à suivre : inactifs depuis plus d'une semaine, ou en difficulté (moins de 50 % de réussite sur au moins 20 réponses). */
+function watchList(players, openPlayer) {
+  const now = Date.now();
+  const rows = [];
+  for (const p of players) {
+    const idle = !p.lastActive ? Infinity : (now - new Date(p.lastActive).getTime()) / DAY_MS;
+    const reasons = [];
+    if (idle >= 7) reasons.push(idle === Infinity ? "n'a jamais joué" : `inactif depuis ${Math.floor(idle)} jours`);
+    if (p.answers >= 20 && p.accuracy != null && p.accuracy < 50) reasons.push(`réussite ${p.accuracy} %`);
+    if (reasons.length) rows.push({ p, reasons, score: (idle === Infinity ? 999 : idle) + (p.accuracy != null && p.accuracy < 50 ? 100 : 0) });
+  }
+  rows.sort((a, b) => b.score - a.score);
+  return h("section.card.stack", h("h2", `Élèves à suivre (${rows.length})`),
+    rows.length ? h("div.list", rows.slice(0, 12).map(({ p, reasons }) => h("button.item", { type: "button", onclick: () => openPlayer(p) },
+      h("div.grow", h("strong", p.username), h("div.muted.small", reasons.join(" · "))), h("span.chip", { class: reasons.length > 1 ? "bad" : "amber" }, reasons.length > 1 ? "à contacter" : "à relancer"))))
+      : h("p.muted", "Tout le monde joue régulièrement et réussit bien. Rien à signaler."),
+    rows.length > 12 ? h("p.muted.small", `Et ${rows.length - 12} autre${rows.length - 12 > 1 ? "s" : ""}.`) : null);
+}
+
+/** Export CSV (séparateur « ; » et BOM : s'ouvre directement dans Excel en français). */
+function exportCsv(rows, sub) {
+  const head = ["Joueur", "Niveau", "XP", "Réponses", "Bonnes réponses", "Réussite (%)", "Temps moyen (s)", "Jours actifs", "Série", "Record de série", "Victoires", "Égalités", "Défaites", "Dernière activité"];
+  const esc = (v) => { const t = String(v ?? ""); return /[;"\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const lines = [head, ...rows.map((p) => [p.username, lvl(p.level), p.xp, p.answers, p.correct, p.accuracy ?? "", p.avgTimeMs == null ? "" : (p.avgTimeMs / 1000).toFixed(1).replace(".", ","), p.activeDays, p.streak, p.longestStreak, p.wins, p.draws, p.losses, p.lastActive ? new Date(p.lastActive).toISOString().slice(0, 10) : ""])];
+  const blob = new Blob(["\uFEFF" + lines.map((l) => l.map(esc).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = h("a", { href: URL.createObjectURL(blob), download: `joueurs-${(sub?.name ?? "matiere").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast("Fichier CSV téléchargé", "good");
 }

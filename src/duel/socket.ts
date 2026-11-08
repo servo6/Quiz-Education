@@ -6,6 +6,7 @@ import { z, ZodError } from "zod";
 import { COOKIE_NAME } from "../auth.ts";
 import { DuelError, type DuelEngine } from "./engine.ts";
 import type { SocketHub } from "./hub.ts";
+import type { RoomEngine } from "./rooms.ts";
 
 /** Serveurs STUN (gratuits) et, si configuré, TURN (TURN_URL, TURN_USERNAME, TURN_CREDENTIAL) pour les réseaux qui bloquent le pair-à-pair. */
 function iceServers(): { urls: string | string[]; username?: string; credential?: string }[] {
@@ -14,6 +15,8 @@ function iceServers(): { urls: string | string[]; username?: string; credential?
   if (url) list.push({ urls: url.split(",").map((u) => u.trim()).filter(Boolean), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
   return list;
 }
+
+export const REACTIONS = ["👍", "😂", "😮", "😅", "🔥", "👏", "😭", "🤝"] as const;
 
 type Ack = (response: unknown) => void;
 
@@ -33,8 +36,8 @@ function errorPayload(e: unknown, log: (e: unknown) => void) {
  *   duel:pick { gameId, chapterId }            duel:answer { gameId, gameQuestionId, choiceIndex }
  *   duel:forfeit { gameId }                    duel:resume {}
  */
-export function attachSocketServer(app: FastifyInstance, deps: { prisma: PrismaClient; engine: DuelEngine; hub: SocketHub }): Server {
-  const { prisma, engine, hub } = deps;
+export function attachSocketServer(app: FastifyInstance, deps: { prisma: PrismaClient; engine: DuelEngine; hub: SocketHub; rooms?: RoomEngine }): Server {
+  const { prisma, engine, hub, rooms } = deps;
   const io = new Server(app.server, { serveClient: true });
   hub.attach(io);
 
@@ -95,6 +98,25 @@ export function attachSocketServer(app: FastifyInstance, deps: { prisma: PrismaC
       if (d.candidate !== undefined && JSON.stringify(d.candidate).length > 2000) return;
       hub.emit(opp, "voice:signal", d);
     });
+    // ── Réactions rapides pendant le duel : un émoji parmi une liste fermée, relayé à l'adversaire (1 par seconde au plus).
+    let lastReact = 0;
+    on("duel:react", z.object({ emoji: z.enum(REACTIONS) }), (d) => {
+      const opp = engine.opponentIdInGame(userId);
+      const now = Date.now();
+      if (!opp || now - lastReact < 700) return;
+      lastReact = now;
+      hub.emit(opp, "duel:reaction", { emoji: d.emoji });
+    });
+    // ── Salons privés en direct (voir rooms.ts)
+    if (rooms) {
+      on("room:create", z.object({ subjectId: z.string().min(1), size: z.number().int() }), (d) => rooms.create(userId, d.subjectId, d.size));
+      on("room:join", z.object({ code: z.string().min(3).max(12) }), (d) => rooms.join(userId, d.code));
+      on("room:leave", z.object({}).passthrough(), () => rooms.leave(userId));
+      on("room:start", z.object({}).passthrough(), () => rooms.start(userId));
+      on("room:answer", z.object({ index: z.number().int().min(0), choiceIndex: z.number().int().min(0) }), (d) => rooms.answer(userId, d.index, d.choiceIndex));
+      on("room:rematch", z.object({}).passthrough(), () => rooms.rematch(userId));
+      on("room:resume", z.object({}).passthrough(), () => ({ state: rooms.snapshot(userId) }));
+    }
     on("voice:config", z.object({}).passthrough(), () => ({ iceServers: iceServers() }));
 
     socket.on("disconnect", () => {

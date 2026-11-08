@@ -24,6 +24,7 @@ model User {
   avatar          String    @default("{}") // JSON : { hair, face, outfit, glasses, hat, background, frame, colors }
   activeSubjectId String? // matière actuellement sélectionnée
   bannedAt        DateTime?
+  deactivatedAt   DateTime? // compte désactivé par son propriétaire (bannedAt est alors aussi renseigné) ; un administrateur peut le rétablir
   createdAt       DateTime  @default(now())
   email           String?   @unique // facultative ; en minuscules
   emailVerifiedAt DateTime?
@@ -43,6 +44,15 @@ model User {
   friendshipsSent     Friendship[] @relation("FriendRequester")
   friendshipsReceived Friendship[] @relation("FriendAddressee")
   messages            Message[]
+  pushSubscriptions   PushSubscription[]
+  dailyEntries        DailyEntry[]
+  reviewCards         ReviewCard[]
+  questionReports     QuestionReport[]
+  leagueMemberships   LeagueMember[]
+  roomPlayers         RoomPlayer[]
+  coinLedger          CoinLedger[]
+  itemUnlocks         ItemUnlock[]
+  examAttempts        ExamAttempt[]
 }
 
 model Subject {
@@ -59,6 +69,7 @@ model Subject {
   games       Game[]
   tiers       Tier[]
   xpEvents    XpEvent[]
+  dailyChallenges DailyChallenge[]
   managers    SubjectManager[]
   friendships Friendship[]
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -145,6 +156,7 @@ model Chapter {
   createdAt DateTime  @default(now())
   deletedAt DateTime? // corbeille
   color     String    @default("") // couleur d'affichage choisie par l'administrateur (#RRGGBB), vide = couleur du thème
+  lesson    String    @default("") // rappel de cours (texte, formules $…$ acceptées), proposé après une mauvaise réponse
   locked    Boolean   @default(false) // bloqué : invisible pour les joueurs tant qu'il n'est pas débloqué
 
   subject   Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
@@ -426,4 +438,195 @@ model EmailToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, kind])
+}
+
+/// Appareil abonné aux notifications push (un utilisateur peut en avoir plusieurs).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Défi du jour : mêmes questions pour tous les membres d'une matière, un jour donné (fuseau du serveur).
+model DailyChallenge {
+  id          String   @id @default(cuid())
+  subjectId   String
+  day         String // AAAA-MM-JJ
+  questionIds String // JSON : identifiants des questions, dans l'ordre
+  createdAt   DateTime @default(now())
+
+  subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  entries DailyEntry[]
+
+  @@unique([subjectId, day])
+}
+
+/// Participation d'un joueur au défi du jour (un seul essai).
+model DailyEntry {
+  id          String    @id @default(cuid())
+  challengeId String
+  userId      String
+  answers     String    @default("[]") // JSON : [{ q, choice, correct, ms }]
+  servedAt    DateTime? // début du chrono de la question en cours
+  correct     Int       @default(0)
+  timeMs      Int       @default(0)
+  xpEarned    Int       @default(0)
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  challenge DailyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+  @@index([userId])
+}
+
+/// Carte de révision espacée : une question ratée qui revient à intervalles croissants.
+model ReviewCard {
+  id         String   @id @default(cuid())
+  userId     String
+  questionId String
+  subjectId  String
+  box        Int      @default(0) // 0..4 en cours, 5 = maîtrisée
+  dueAt      DateTime
+  reviewedAt DateTime @default(now())
+  lapses     Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@index([userId, subjectId, dueAt])
+}
+
+/// Signalement d'une question par un joueur (réponse fausse, ambiguë, faute…).
+model QuestionReport {
+  id         String    @id @default(cuid())
+  userId     String
+  questionId String
+  subjectId  String
+  reason     String // WRONG_ANSWER | AMBIGUOUS | TYPO | OTHER
+  comment    String    @default("")
+  status     String    @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@index([subjectId, status])
+}
+
+/// Ligue (Bronze → Diamant) d'un joueur dans une matière.
+model LeagueMember {
+  id        String   @id @default(cuid())
+  userId    String
+  subjectId String
+  tier      Int      @default(0)
+  lastMove  String? // JSON : { week, from, to, rank, of, xp } de la dernière semaine clôturée
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectId])
+  @@index([subjectId, tier])
+}
+
+/// Semaine de ligue déjà clôturée pour une matière (garde-fou contre une double clôture).
+model LeagueWeek {
+  id        String   @id @default(cuid())
+  subjectId String
+  weekKey   String // lundi de la semaine, AAAA-MM-JJ
+  settledAt DateTime @default(now())
+
+  @@unique([subjectId, weekKey])
+}
+
+/// Partie de salon privé terminée (le salon lui-même vit en mémoire).
+model RoomGame {
+  id         String   @id @default(cuid())
+  subjectId  String
+  code       String
+  size       Int
+  finishedAt DateTime @default(now())
+
+  players RoomPlayer[]
+
+  @@index([subjectId, finishedAt])
+}
+
+model RoomPlayer {
+  id          String @id @default(cuid())
+  gameId      String
+  userId      String
+  username    String
+  rank        Int
+  score       Int
+  correct     Int
+  xpEarned    Int    @default(0)
+  coinsEarned Int    @default(0)
+
+  game RoomGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, userId])
+  @@index([userId])
+}
+
+/// Pièces : le solde est la somme du journal (gains positifs, achats négatifs).
+model CoinLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String // ROOM | PURCHASE
+  refId     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Thème ou animation acheté avec des pièces.
+model ItemUnlock {
+  id        String   @id @default(cuid())
+  userId    String
+  itemId    String
+  price     Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+}
+
+/// Examen blanc : questions figées, réponses enregistrées au fil de l'eau, correction après la remise.
+model ExamAttempt {
+  id          String    @id @default(cuid())
+  userId      String
+  subjectId   String
+  questionIds String // JSON : [id, …]
+  answers     String    @default("{}") // JSON : { questionId: indexChoisi | null }
+  durationSec Int
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  correct     Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subjectId, finishedAt])
+}
+
+/// État d'un salon privé en cours : permet de le reprendre après un redémarrage du serveur.
+model RoomSnapshot {
+  code      String   @id
+  data      String // JSON
+  updatedAt DateTime @updatedAt
 }

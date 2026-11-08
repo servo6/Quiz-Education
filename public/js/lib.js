@@ -77,8 +77,12 @@ export function errorMessage(e) {
 }
 export const fail = (e) => toast(errorMessage(e), "bad", 5000);
 
-export function confetti() {
+export function confetti(forceStyle) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  let style = forceStyle;
+  if (!style) { try { style = localStorage.getItem("qp-fx"); } catch { /* stockage indisponible */ } }
+  if (style === "stars") return stars();
+  if (style === "fireworks") return fireworks();
   const cs = getComputedStyle(document.documentElement);
   const colors = ["--accent", "--good", "--warn", "--bad", "--text"].map((v) => cs.getPropertyValue(v).trim() || "#888");
   const box = h("div.confetti");
@@ -92,6 +96,38 @@ export function confetti() {
   }
   document.body.append(box);
   setTimeout(() => box.remove(), 2600);
+}
+
+function stars() {
+  const box = h("div.confetti");
+  for (let i = 0; i < 28; i++) {
+    const p = h("b.fx-star", "⭐");
+    p.style.left = Math.random() * 100 + "%";
+    p.style.fontSize = 14 + Math.random() * 18 + "px";
+    p.style.animationDelay = Math.random() * 0.6 + "s";
+    box.append(p);
+  }
+  document.body.append(box);
+  setTimeout(() => box.remove(), 2800);
+}
+
+function fireworks() {
+  const cs = getComputedStyle(document.documentElement);
+  const colors = ["--accent", "--good", "--warn", "--bad"].map((v) => cs.getPropertyValue(v).trim() || "#fa0");
+  const box = h("div.confetti");
+  [[22, 34], [52, 24], [80, 38]].forEach(([x, y], k) => {
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2, d = 70 + Math.random() * 50;
+      const p = h("i.fx-spark");
+      p.style.left = x + "%"; p.style.top = y + "%";
+      p.style.background = colors[(i + k) % colors.length];
+      p.style.setProperty("--tx", Math.cos(a) * d + "px"); p.style.setProperty("--ty", Math.sin(a) * d + "px");
+      p.style.animationDelay = k * 0.35 + "s";
+      box.append(p);
+    }
+  });
+  document.body.append(box);
+  setTimeout(() => box.remove(), 2800);
 }
 
 /** Feuille modale. `build(close)` renvoie le contenu. */

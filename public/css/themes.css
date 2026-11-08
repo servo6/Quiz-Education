@@ -25,8 +25,8 @@
   --nav-bg: #0a2540; --nav-text: #ffffff;
   --stage-bg: #0a2540; --stage-text: #ffffff;
   --good: #108a5a; --bad: #d63b4b; --warn: #b7791f;
-  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
-  --radius: 12px; --radius-sm: 8px; --display-weight: 650; --display-tracking: -.02em;
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif; --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
+  --radius: 22px; --radius-sm: 14px; --display-weight: 800; --display-tracking: -.025em;
 }
 
 /* Papier — clair, chaleureux, titres à empattement (espace de notes) */
@@ -44,13 +44,13 @@
 /* Minuit — bleu nuit, accent bleu vif (plateforme de code) */
 [data-theme="midnight"] {
   color-scheme: dark;
-  --bg: #0d1117; --surface: #151b23; --line: #2b323c; --text: #e6edf3; --muted: #8b95a3;
-  --accent: #388bfd; --on-accent: #ffffff;
-  --nav-bg: #010409; --nav-text: #e6edf3;
-  --stage-bg: #010409; --stage-text: #e6edf3;
-  --good: #3fb950; --bad: #f85149; --warn: #d29922;
-  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
-  --radius: 10px; --radius-sm: 6px; --display-weight: 650; --display-tracking: -.015em;
+  --bg: #0c1220; --surface: #131c30; --line: #2a3a5c; --text: #e8eefb; --muted: #8fa0c4;
+  --accent: #6d8dff; --accent-deep: #4562d6; --on-accent: #ffffff;
+  --nav-bg: #0c1220; --nav-text: #e8eefb;
+  --stage-bg: #0c1220; --stage-text: #f0f4fd;
+  --good: #3fd18a; --bad: #ff6b78; --warn: #f2c14e;
+  --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 800; --display-tracking: 0;
 }
 
 /* Monochrome — noir et blanc, rigueur typographique (hébergeur web) */
@@ -68,37 +68,37 @@
 /* Émeraude — sombre, accent vert vif (streaming musical) */
 [data-theme="emerald"] {
   color-scheme: dark;
-  --bg: #0a0f0c; --surface: #121a15; --line: #223128; --text: #e8f1ea; --muted: #86a091;
-  --accent: #22c55e; --on-accent: #04170b;
-  --nav-bg: #060a07; --nav-text: #e8f1ea;
-  --stage-bg: #060a07; --stage-text: #eef6f0;
-  --good: #34d27b; --bad: #f0605d; --warn: #e3b341;
-  --font-display: "Plus Jakarta Sans", system-ui, sans-serif; --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
-  --radius: 14px; --radius-sm: 10px; --display-weight: 700; --display-tracking: -.02em;
+  --bg: #0b1410; --surface: #12211a; --line: #2a4436; --text: #eaf6ee; --muted: #8fb09d;
+  --accent: #2fd16b; --accent-deep: #1d9a4c; --on-accent: #04200f;
+  --nav-bg: #0b1410; --nav-text: #eaf6ee;
+  --stage-bg: #0b1410; --stage-text: #f0faf3;
+  --good: #2fd16b; --bad: #ff6a6a; --warn: #f5c04a;
+  --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 800; --display-tracking: 0;
 }
 
 /* Azur — clair, bleu institutionnel (cours en ligne) */
 [data-theme="azure"] {
   color-scheme: light;
-  --bg: #f4f7fc; --surface: #ffffff; --line: #dbe3f0; --text: #11224a; --muted: #5a6a8c;
-  --accent: #0b5ed7; --on-accent: #ffffff;
-  --nav-bg: #ffffff; --nav-text: #11224a;
-  --stage-bg: #0c2253; --stage-text: #ffffff;
-  --good: #14804f; --bad: #d03a4a; --warn: #a96a0e;
-  --font-display: "DM Sans", system-ui, sans-serif; --font-body: "DM Sans", system-ui, sans-serif;
-  --radius: 10px; --radius-sm: 8px; --display-weight: 700; --display-tracking: -.02em;
+  --bg: #eef6ff; --surface: #ffffff; --line: #cfe0f4; --text: #1d3557; --muted: #5d7799;
+  --accent: #1d8ff2; --accent-deep: #1269b8; --on-accent: #ffffff;
+  --nav-bg: #ffffff; --nav-text: #1d3557;
+  --stage-bg: #eef6ff; --stage-text: #1d3557;
+  --good: #34a853; --bad: #e5484d; --warn: #d98a0b;
+  --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 800; --display-tracking: 0;
 }
 
 /* Aubergine — barre latérale violet profond (messagerie d'équipe) */
 [data-theme="aubergine"] {
   color-scheme: light;
-  --bg: #f7f6f8; --surface: #ffffff; --line: #e4e0e7; --text: #1f1b22; --muted: #67606e;
-  --accent: #6b2d73; --on-accent: #ffffff;
-  --nav-bg: #3c0f40; --nav-text: #ffffff;
-  --stage-bg: #3c0f40; --stage-text: #ffffff;
-  --good: #1f8a5b; --bad: #cc3545; --warn: #a8700f;
-  --font-display: "Lato", system-ui, sans-serif; --font-body: "Lato", system-ui, sans-serif;
-  --radius: 10px; --radius-sm: 6px; --display-weight: 900; --display-tracking: -.01em;
+  --bg: #f6f0fc; --surface: #ffffff; --line: #ddd0ee; --text: #2d1b47; --muted: #7a6a96;
+  --accent: #a259f0; --accent-deep: #7b34c4; --on-accent: #ffffff;
+  --nav-bg: #ffffff; --nav-text: #2d1b47;
+  --stage-bg: #f6f0fc; --stage-text: #2d1b47;
+  --good: #2fae6b; --bad: #e5484d; --warn: #d98a0b;
+  --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 800; --display-tracking: 0;
 }
 
 /* Nord — bleu glacier, contrastes doux */
@@ -128,25 +128,25 @@
 /* Royal — bleu marine et or (prestige) */
 [data-theme="royal"] {
   color-scheme: dark;
-  --bg: #0a1128; --surface: #111a38; --line: #232f5c; --text: #eef1fb; --muted: #9aa6cb;
-  --accent: #d4af37; --on-accent: #1a1405;
-  --nav-bg: #060c1f; --nav-text: #eef1fb;
-  --stage-bg: #060c1f; --stage-text: #f4f6fd;
-  --good: #46c28a; --bad: #ee6a73; --warn: #e6bf55;
-  --font-display: "Playfair Display", Georgia, serif; --font-body: "Inter", system-ui, sans-serif;
-  --radius: 10px; --radius-sm: 6px; --display-weight: 700; --display-tracking: 0;
+  --bg: #0c1330; --surface: #141d45; --line: #2c3a75; --text: #f1f3fc; --muted: #a3afd6;
+  --accent: #ffc93c; --accent-deep: #c9971b; --on-accent: #2a1d00;
+  --nav-bg: #0c1330; --nav-text: #f1f3fc;
+  --stage-bg: #0c1330; --stage-text: #f6f7fe;
+  --good: #4cd694; --bad: #ff6f7a; --warn: #ffc93c;
+  --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 800; --display-tracking: 0;
 }
 
 /* Rubis — blanc éclatant, accent corail-rouge (voyage et hébergement) */
 [data-theme="ruby"] {
-  color-scheme: light;
-  --bg: #f7f7f7; --surface: #ffffff; --line: #e8e8e8; --text: #222222; --muted: #6f6f6f;
-  --accent: #e0284f; --on-accent: #ffffff;
-  --nav-bg: #ffffff; --nav-text: #222222;
-  --stage-bg: #222222; --stage-text: #ffffff;
-  --good: #18865a; --bad: #c2303f; --warn: #a96a0e;
-  --font-display: "DM Sans", system-ui, sans-serif; --font-body: "DM Sans", system-ui, sans-serif;
-  --radius: 16px; --radius-sm: 10px; --display-weight: 700; --display-tracking: -.02em;
+  color-scheme: dark;
+  --bg: #1a1014; --surface: #26171d; --line: #4a2a35; --text: #fbeef1; --muted: #c09aa6;
+  --accent: #ff4d73; --accent-deep: #c9264a; --on-accent: #ffffff;
+  --nav-bg: #1a1014; --nav-text: #fbeef1;
+  --stage-bg: #1a1014; --stage-text: #fff3f5;
+  --good: #4ad78b; --bad: #ff8a5c; --warn: #ffc857;
+  --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 800; --display-tracking: 0;
 }
 
 /* Contraste élevé — accessibilité maximale */
@@ -157,6 +157,145 @@
   --nav-bg: #000000; --nav-text: #ffffff;
   --stage-bg: #000000; --stage-text: #ffffff;
   --good: #3dff8a; --bad: #ff6b6b; --warn: #ffd60a;
-  --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif;
-  --radius: 6px; --radius-sm: 4px; --display-weight: 800; --display-tracking: -.01em;
+  --font-display: "Newsreader", Georgia, serif; --font-body: "Inter", system-ui, sans-serif;
+  --radius: 4px; --radius-sm: 3px; --display-weight: 700; --display-tracking: -.01em;
 }
+
+/* ── Thèmes à débloquer ── */
+/* Aurore — nuit polaire, vert et violet (niveau 5) */
+[data-theme="aurora"] {
+  color-scheme: dark;
+  --bg: #0b1020; --surface: #121a30; --line: #25305a; --text: #e8f0ff; --muted: #8fa3c9;
+  --accent: #3ddc97; --on-accent: #042417;
+  --nav-bg: #070b17; --nav-text: #e8f0ff;
+  --stage-bg: linear-gradient(160deg, #0b1020 0%, #1a1f4d 55%, #0f4a45 100%); --stage-text: #f2f7ff;
+  --good: #3ddc97; --bad: #ff6b81; --warn: #f2c14e;
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif; --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
+  --radius: 16px; --radius-sm: 10px; --display-weight: 800; --display-tracking: -.02em;
+}
+/* Néon — noir profond, rose et cyan (niveau 10) */
+[data-theme="neon"] {
+  color-scheme: dark;
+  --bg: #07060d; --surface: #110f1d; --line: #2b2147; --text: #f4f0ff; --muted: #9f94c4;
+  --accent: #ff3d9a; --on-accent: #ffffff;
+  --nav-bg: #04030a; --nav-text: #f4f0ff;
+  --stage-bg: linear-gradient(160deg, #07060d 0%, #2a0f3f 60%, #0b3b4d 100%); --stage-text: #ffffff;
+  --good: #29e6c5; --bad: #ff5470; --warn: #ffd23f;
+  --font-display: "Space Grotesk", system-ui, sans-serif; --font-body: "Space Grotesk", system-ui, sans-serif;
+  --radius: 12px; --radius-sm: 8px; --display-weight: 700; --display-tracking: -.01em;
+}
+/* Or et noir — élégance sombre (niveau 15) */
+[data-theme="goldblack"] {
+  color-scheme: dark;
+  --bg: #0c0b09; --surface: #171511; --line: #34301f; --text: #f3ecd9; --muted: #a39a80;
+  --accent: #e0b43c; --on-accent: #1a1405;
+  --nav-bg: #070605; --nav-text: #f3ecd9;
+  --stage-bg: linear-gradient(160deg, #0c0b09 0%, #2a2210 100%); --stage-text: #fbf5e4;
+  --good: #7cc47a; --bad: #e5645a; --warn: #e0b43c;
+  --font-display: "Lora", Georgia, serif; --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 6px; --display-weight: 700; --display-tracking: 0;
+}
+
+
+/* ───────── Thèmes « arcade » : cartes à bordure épaisse, boutons en relief, arrondis généreux ───────── */
+/* Pousse — sombre, vert vif */
+[data-theme="pousse"] {
+  color-scheme: dark;
+  --bg: #131316; --surface: #1b1b1f; --line: #3a3a40; --text: #f1f1f3; --muted: #9a9aa3;
+  --accent: #84cc16; --accent-deep: #5f9710; --on-accent: #0e1a03;
+  --nav-bg: #131316; --nav-text: #f1f1f3;
+  --stage-bg: #131316; --stage-text: #f6f6f7;
+  --good: #84cc16; --bad: #f0575d; --warn: #f5b82e;
+  --font-display: "Quicksand", system-ui, sans-serif; --font-body: "Quicksand", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 700; --display-tracking: 0;
+}
+/* Pousse claire — blanc, vert vif */
+[data-theme="pousse-clair"] {
+  color-scheme: light;
+  --bg: #ffffff; --surface: #ffffff; --line: #e3e3e6; --text: #3c3c43; --muted: #7a7a85;
+  --accent: #58cc02; --accent-deep: #44a002; --on-accent: #0c1f00;
+  --nav-bg: #ffffff; --nav-text: #3c3c43;
+  --stage-bg: #ffffff; --stage-text: #3c3c43;
+  --good: #3fa000; --bad: #e0434a; --warn: #c98a0a;
+  --font-display: "Quicksand", system-ui, sans-serif; --font-body: "Quicksand", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 700; --display-tracking: 0;
+}
+/* Ciel — sombre, bleu vif */
+[data-theme="ciel"] {
+  color-scheme: dark;
+  --bg: #121519; --surface: #1a1f25; --line: #37404a; --text: #eef2f6; --muted: #93a0ae;
+  --accent: #1cb0f6; --accent-deep: #1389bf; --on-accent: #02202f;
+  --nav-bg: #121519; --nav-text: #eef2f6;
+  --stage-bg: #121519; --stage-text: #f3f6f9;
+  --good: #58cc02; --bad: #f0575d; --warn: #f5b82e;
+  --font-display: "Quicksand", system-ui, sans-serif; --font-body: "Quicksand", system-ui, sans-serif;
+  --radius: 20px; --radius-sm: 14px; --display-weight: 700; --display-tracking: 0;
+}
+:is([data-theme="pousse"], [data-theme="pousse-clair"], [data-theme="ciel"], [data-theme="emerald"], [data-theme="azure"], [data-theme="ruby"], [data-theme="royal"], [data-theme="aubergine"], [data-theme="midnight"]) :is(.card, .item, .mode, .hero, .feedback, .answer, .theme-card, .opt, .chapter) { border-width: 2px; }
+:is([data-theme="pousse"], [data-theme="pousse-clair"], [data-theme="ciel"], [data-theme="emerald"], [data-theme="azure"], [data-theme="ruby"], [data-theme="royal"], [data-theme="aubergine"], [data-theme="midnight"]) .btn { border-width: 2px; border-bottom-width: 4px; font-weight: 700; }
+:is([data-theme="pousse"], [data-theme="pousse-clair"], [data-theme="ciel"], [data-theme="emerald"], [data-theme="azure"], [data-theme="ruby"], [data-theme="royal"], [data-theme="aubergine"], [data-theme="midnight"]) .btn.primary { border-color: var(--accent-deep); }
+:is([data-theme="pousse"], [data-theme="pousse-clair"], [data-theme="ciel"], [data-theme="emerald"], [data-theme="azure"], [data-theme="ruby"], [data-theme="royal"], [data-theme="aubergine"], [data-theme="midnight"]) .btn:active { transform: translateY(3px); border-bottom-width: 2px; margin-bottom: 2px; }
+:is([data-theme="pousse"], [data-theme="pousse-clair"], [data-theme="ciel"], [data-theme="emerald"], [data-theme="azure"], [data-theme="ruby"], [data-theme="royal"], [data-theme="aubergine"], [data-theme="midnight"]) .answer { border-bottom-width: 4px; }
+
+/* Polices de l'interface (réglage de l'administrateur) ; « theme » = pas d'attribut, chaque thème garde la sienne. */
+:root[data-font="quicksand"] { --font-display: "Quicksand", system-ui, sans-serif; --font-body: "Quicksand", system-ui, sans-serif; }
+:root[data-font="nunito"] { --font-display: "Nunito", system-ui, sans-serif; --font-body: "Nunito", system-ui, sans-serif; }
+:root[data-font="inter"] { --font-display: "Inter", system-ui, sans-serif; --font-body: "Inter", system-ui, sans-serif; }
+:root[data-font="dmsans"] { --font-display: "DM Sans", system-ui, sans-serif; --font-body: "DM Sans", system-ui, sans-serif; }
+
+/* ═════════ Styles propres à chaque thème (forme des cartes, boutons, bordures) ═════════ */
+/* Les classes visées sont communes à toute l'interface : on ne change que l'allure, jamais la mise en page. */
+
+/* Porcelaine — verre doux : cartes sans bordure sur grandes ombres diffuses, boutons en pilule */
+[data-theme="porcelain"] { --shadow: 0 10px 30px -12px rgba(26, 35, 64, .22), 0 2px 6px rgba(26, 35, 64, .05); }
+[data-theme="porcelain"] :is(.card, .item, .mode, .hero, .chapter) { border-color: transparent; }
+[data-theme="porcelain"] .btn { border-radius: 999px; padding-inline: 20px; box-shadow: 0 1px 2px rgba(26, 35, 64, .08); }
+[data-theme="porcelain"] .btn.primary { background: linear-gradient(135deg, #6a63ff, #4a43d8); border-color: transparent; box-shadow: 0 8px 18px -8px rgba(91, 84, 240, .7); }
+[data-theme="porcelain"] .answer { border-radius: 18px; }
+
+/* Papier — papier collé : encre noire, bordures nettes et ombres décalées qui s'écrasent au clic */
+[data-theme="paper"] { --shadow: 4px 4px 0 #2f2d29; }
+[data-theme="paper"] :is(.card, .item, .mode, .hero, .chapter, .feedback) { border: 2px solid #2f2d29; }
+[data-theme="paper"] .btn { border: 2px solid #2f2d29; box-shadow: 3px 3px 0 #2f2d29; font-weight: 700; }
+[data-theme="paper"] .btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #2f2d29; }
+[data-theme="paper"] .btn.primary { background: #ffd84d; color: #2f2d29; }
+[data-theme="paper"] .answer { border: 2px solid #2f2d29; box-shadow: 3px 3px 0 #2f2d29; }
+[data-theme="paper"] .item:hover, [data-theme="paper"] .mode:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 #2f2d29; }
+
+/* Sépia — livre ancien : double filet, petites capitales sur les titres, boutons à filet intérieur */
+[data-theme="sepia"] { --shadow: 0 1px 0 rgba(58, 47, 34, .08); }
+[data-theme="sepia"] :is(.card, .item, .mode, .hero, .chapter) { border: 1px solid #b9a77f; outline: 1px solid #d6c8a4; outline-offset: -5px; }
+[data-theme="sepia"] .btn { border: 1px solid #8a5a3a; box-shadow: inset 0 0 0 2px var(--surface), inset 0 0 0 3px #c8b48a; letter-spacing: .02em; }
+[data-theme="sepia"] .btn.primary { box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 3px #e9c9a6; }
+[data-theme="sepia"] :is(h1, h2) { font-variant: small-caps; letter-spacing: .03em; }
+
+/* Nord — verre dépoli glacé : surfaces translucides, flou d'arrière-plan, filets clairs */
+[data-theme="nord"] body { background: radial-gradient(1200px 600px at 20% -10%, #3a4a63 0%, transparent 60%), radial-gradient(900px 500px at 100% 0%, #2f4b55 0%, transparent 55%), var(--bg); background-attachment: fixed; }
+[data-theme="nord"] { --shadow: 0 8px 24px -10px rgba(0, 0, 0, .5); }
+[data-theme="nord"] :is(.card, .item, .mode, .hero, .chapter, .feedback) { background: color-mix(in srgb, var(--surface) 62%, transparent); border-color: rgba(236, 239, 244, .14); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2); }
+[data-theme="nord"] .btn { backdrop-filter: blur(8px); border-color: rgba(236, 239, 244, .18); }
+[data-theme="nord"] .btn.primary { background: linear-gradient(180deg, #9ccfdd, #6fb0c3); border-color: transparent; }
+
+/* Aurore — lueurs boréales : fond dégradé, cartes à liseré lumineux vert et violet */
+[data-theme="aurora"] body { background: radial-gradient(900px 500px at 10% -5%, rgba(61, 220, 151, .16), transparent 60%), radial-gradient(900px 500px at 95% 0%, rgba(124, 92, 255, .20), transparent 60%), var(--bg); background-attachment: fixed; }
+[data-theme="aurora"] { --shadow: 0 12px 34px -16px rgba(61, 220, 151, .35); }
+[data-theme="aurora"] :is(.card, .item, .mode, .hero, .chapter) { border-color: transparent; background: linear-gradient(var(--surface), var(--surface)) padding-box, linear-gradient(135deg, rgba(61, 220, 151, .7), rgba(124, 92, 255, .7)) border-box; border: 1.5px solid transparent; }
+[data-theme="aurora"] .btn.primary { background: linear-gradient(135deg, #3ddc97, #4fd0e8); border-color: transparent; box-shadow: 0 8px 22px -8px rgba(61, 220, 151, .6); }
+
+/* Néon — enseigne lumineuse : contours fins, halo rose et cyan, titres qui brillent */
+[data-theme="neon"] { --shadow: 0 0 0 1px rgba(255, 61, 154, .25), 0 0 24px -6px rgba(255, 61, 154, .45); }
+[data-theme="neon"] :is(.card, .item, .mode, .hero, .chapter, .feedback) { border-color: rgba(255, 61, 154, .55); }
+[data-theme="neon"] .btn { border-color: rgba(41, 230, 197, .6); box-shadow: 0 0 14px -4px rgba(41, 230, 197, .6); }
+[data-theme="neon"] .btn.primary { border-color: #ff7fc0; box-shadow: 0 0 18px rgba(255, 61, 154, .75), inset 0 0 12px rgba(255, 255, 255, .25); }
+[data-theme="neon"] :is(h1, h2) { text-shadow: 0 0 14px rgba(255, 61, 154, .65); }
+[data-theme="neon"] .answer { border-color: rgba(41, 230, 197, .45); }
+
+/* Or et noir — maison de luxe : filets dorés fins, titres espacés, bouton doré dégradé */
+[data-theme="goldblack"] { --shadow: 0 14px 30px -18px rgba(224, 180, 60, .45); }
+[data-theme="goldblack"] :is(.card, .item, .mode, .hero, .chapter, .feedback, .answer) { border: 1px solid rgba(224, 180, 60, .55); }
+[data-theme="goldblack"] .btn { border: 1px solid rgba(224, 180, 60, .6); letter-spacing: .04em; }
+[data-theme="goldblack"] .btn.primary { background: linear-gradient(180deg, #f3d37a, #c79a2b); color: #1a1405; border-color: #f3d37a; }
+[data-theme="goldblack"] :is(h1, h2) { letter-spacing: .06em; }
+
+/* Thèmes « arcade » : les nouveaux éléments (modes de jeu, cartes de duel) suivent le même relief */
+:is([data-theme="pousse"], [data-theme="pousse-clair"], [data-theme="ciel"], [data-theme="emerald"], [data-theme="azure"], [data-theme="ruby"], [data-theme="royal"], [data-theme="aubergine"], [data-theme="midnight"]) :is(.mode-opt, .dcard, .dlist) { border-width: 2px; border-bottom-width: 4px; }

@@ -9,6 +9,7 @@ CREATE TABLE "User" (
   "avatar" TEXT NOT NULL DEFAULT '{}',
   "activeSubjectId" TEXT,
   "bannedAt" TIMESTAMP(3),
+  "deactivatedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "email" TEXT,
   "emailVerifiedAt" TIMESTAMP(3),
@@ -76,6 +77,7 @@ CREATE TABLE "Chapter" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "deletedAt" TIMESTAMP(3),
   "color" TEXT NOT NULL DEFAULT '',
+  "lesson" TEXT NOT NULL DEFAULT '',
   "locked" BOOLEAN NOT NULL DEFAULT false
 );
 CREATE UNIQUE INDEX "Chapter_subjectId_name_key" ON "Chapter"("subjectId", "name");
@@ -249,3 +251,133 @@ CREATE TABLE "EmailToken" (
 );
 CREATE UNIQUE INDEX "EmailToken_tokenHash_key" ON "EmailToken"("tokenHash");
 CREATE INDEX "EmailToken_userId_kind_idx" ON "EmailToken"("userId", "kind");
+CREATE TABLE "PushSubscription" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "endpoint" TEXT NOT NULL,
+  "p256dh" TEXT NOT NULL,
+  "auth" TEXT NOT NULL,
+  "userAgent" TEXT NOT NULL DEFAULT '',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
+CREATE INDEX "PushSubscription_userId_idx" ON "PushSubscription"("userId");
+CREATE TABLE "DailyChallenge" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "subjectId" TEXT NOT NULL,
+  "day" TEXT NOT NULL,
+  "questionIds" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "DailyChallenge_subjectId_day_key" ON "DailyChallenge"("subjectId", "day");
+CREATE TABLE "DailyEntry" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "challengeId" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "answers" TEXT NOT NULL DEFAULT '[]',
+  "servedAt" TIMESTAMP(3),
+  "correct" INTEGER NOT NULL DEFAULT 0,
+  "timeMs" INTEGER NOT NULL DEFAULT 0,
+  "xpEarned" INTEGER NOT NULL DEFAULT 0,
+  "finishedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "DailyEntry_challengeId_userId_key" ON "DailyEntry"("challengeId", "userId");
+CREATE INDEX "DailyEntry_userId_idx" ON "DailyEntry"("userId");
+CREATE TABLE "ReviewCard" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "questionId" TEXT NOT NULL,
+  "subjectId" TEXT NOT NULL,
+  "box" INTEGER NOT NULL DEFAULT 0,
+  "dueAt" TIMESTAMP(3) NOT NULL,
+  "reviewedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "lapses" INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX "ReviewCard_userId_questionId_key" ON "ReviewCard"("userId", "questionId");
+CREATE INDEX "ReviewCard_userId_subjectId_dueAt_idx" ON "ReviewCard"("userId", "subjectId", "dueAt");
+CREATE TABLE "QuestionReport" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "questionId" TEXT NOT NULL,
+  "subjectId" TEXT NOT NULL,
+  "reason" TEXT NOT NULL,
+  "comment" TEXT NOT NULL DEFAULT '',
+  "status" TEXT NOT NULL DEFAULT 'OPEN',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "resolvedAt" TIMESTAMP(3)
+);
+CREATE UNIQUE INDEX "QuestionReport_userId_questionId_key" ON "QuestionReport"("userId", "questionId");
+CREATE INDEX "QuestionReport_subjectId_status_idx" ON "QuestionReport"("subjectId", "status");
+CREATE TABLE "LeagueMember" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "subjectId" TEXT NOT NULL,
+  "tier" INTEGER NOT NULL DEFAULT 0,
+  "lastMove" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "LeagueMember_userId_subjectId_key" ON "LeagueMember"("userId", "subjectId");
+CREATE INDEX "LeagueMember_subjectId_tier_idx" ON "LeagueMember"("subjectId", "tier");
+CREATE TABLE "LeagueWeek" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "subjectId" TEXT NOT NULL,
+  "weekKey" TEXT NOT NULL,
+  "settledAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "LeagueWeek_subjectId_weekKey_key" ON "LeagueWeek"("subjectId", "weekKey");
+CREATE TABLE "RoomGame" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "subjectId" TEXT NOT NULL,
+  "code" TEXT NOT NULL,
+  "size" INTEGER NOT NULL,
+  "finishedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX "RoomGame_subjectId_finishedAt_idx" ON "RoomGame"("subjectId", "finishedAt");
+CREATE TABLE "RoomPlayer" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "gameId" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "username" TEXT NOT NULL,
+  "rank" INTEGER NOT NULL,
+  "score" INTEGER NOT NULL,
+  "correct" INTEGER NOT NULL,
+  "xpEarned" INTEGER NOT NULL DEFAULT 0,
+  "coinsEarned" INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX "RoomPlayer_gameId_userId_key" ON "RoomPlayer"("gameId", "userId");
+CREATE INDEX "RoomPlayer_userId_idx" ON "RoomPlayer"("userId");
+CREATE TABLE "CoinLedger" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "amount" INTEGER NOT NULL,
+  "reason" TEXT NOT NULL,
+  "refId" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX "CoinLedger_userId_idx" ON "CoinLedger"("userId");
+CREATE TABLE "ItemUnlock" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "itemId" TEXT NOT NULL,
+  "price" INTEGER NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX "ItemUnlock_userId_itemId_key" ON "ItemUnlock"("userId", "itemId");
+CREATE TABLE "ExamAttempt" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "userId" TEXT NOT NULL,
+  "subjectId" TEXT NOT NULL,
+  "questionIds" TEXT NOT NULL,
+  "answers" TEXT NOT NULL DEFAULT '{}',
+  "durationSec" INTEGER NOT NULL,
+  "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "finishedAt" TIMESTAMP(3),
+  "correct" INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX "ExamAttempt_userId_subjectId_finishedAt_idx" ON "ExamAttempt"("userId", "subjectId", "finishedAt");
+CREATE TABLE "RoomSnapshot" (
+  "code" TEXT NOT NULL PRIMARY KEY,
+  "data" TEXT NOT NULL,
+  "updatedAt" TIMESTAMP(3) NOT NULL
+);

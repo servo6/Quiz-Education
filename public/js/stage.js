@@ -1,5 +1,7 @@
 import { h, mount, fail, toast, confetti, avatarEl, rich } from "./lib.js";
 import { S, lvl, activeSubject } from "./state.js";
+import { reportButton } from "./report.js";
+import { lessonButton } from "./lesson.js";
 
 const C = 2 * Math.PI * 26;
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -26,6 +28,13 @@ export function playStage(opts) {
   let tick = null;
   let servedPending = null;
   const pips = Array.from({ length: opts.total }, () => "");
+  // Survie : cœurs restants. Course : compteur de bonnes réponses (pas de total connu d'avance).
+  const heart = { max: opts.hearts?.max ?? 0, left: opts.hearts?.left ?? 0 };
+  let okCount = opts.okCount ?? 0;
+  const heartsEl = heart.max ? h("div.hearts", { role: "img", "aria-label": "Vies restantes" }) : null;
+  const paintHearts = (lost) => heartsEl?.replaceChildren(...Array.from({ length: heart.max }, (_, i) => h("span.heart", { class: i < heart.left ? "" : (lost && i === heart.left ? "lost pop" : "lost") }, "♥")));
+  const okEl = opts.open ? h("span.chip.ok-count", "✓ ", h("b", String(okCount))) : null;
+  paintHearts(false);
   const stop = () => { clearInterval(tick); tick = null; };
   const sub = activeSubject();
   const lvlNow = { level: sub?.level ?? 1, into: sub?.xpIntoLevel ?? 0, next: sub?.xpForNext ?? 100 };
@@ -52,7 +61,7 @@ export function playStage(opts) {
     s.append(bg, fg);
     ring.append(s, num);
 
-    const pipEls = pips.map((st, i) => h("i", { class: i === pos ? "now" : st }));
+    const pipEls = opts.open ? [] : pips.map((st, i) => h("i", { class: i === pos ? "now" : st }));
     const feedback = h("div.fb-slot", { "aria-live": "polite" });
     const buttons = q.choices.map((c, i) =>
       h("button.answer", { onclick: () => submit(i) }, h("span.tag", LETTERS[i] ?? i + 1), h("span.txt", rich(c)), h("span.mark")));
@@ -90,7 +99,7 @@ export function playStage(opts) {
       let res;
       try {
         if (servedPending) await servedPending;
-        res = await opts.answer(q.gameQuestionId, i);
+        res = await opts.answer(q.gameQuestionId, i, timedOut);
       } catch (e) {
         fail(e);
         feedback.replaceChildren(h("button.btn.primary.block", { onclick: resync }, "Continuer"));
@@ -101,7 +110,9 @@ export function playStage(opts) {
         hud.querySelectorAll(".pscore").forEach((el, k) => { el.textContent = String(k === 0 ? res.scores.you : res.scores.opponent); el.dataset.score = el.textContent; });
       }
       pips[pos] = res.correct ? "ok" : "ko";
-      pipEls[pos].className = res.correct ? "ok" : "ko";
+      if (pipEls[pos]) pipEls[pos].className = res.correct ? "ok" : "ko";
+      if (res.correct && okEl) { okCount++; okEl.querySelector("b").textContent = String(okCount); }
+      if (heartsEl && typeof res.hearts === "number") { const lost = res.hearts < heart.left; heart.left = res.hearts; paintHearts(lost); }
       if (res.level) { lvlNow.level = lvl(res.level); lvlNow.into = res.level.xpIntoLevel ?? lvlNow.into; lvlNow.next = res.level.xpForNext ?? lvlNow.next; }
       if (hud.xpFill) hud.xpFill.style.width = `${Math.min(100, (lvlNow.into / Math.max(1, lvlNow.next)) * 100)}%`;
       buttons.forEach((b, k) => {
@@ -122,6 +133,7 @@ export function playStage(opts) {
           h("div.fb-right",
             res.xpGained ? h("span.xp-pop", `+${res.xpGained} XP`) : null)),
         res.explanation ? h("p.expl", rich(res.explanation)) : null,
+        h("div.row.between", res.correct ? h("span") : lessonButton(q.gameQuestionId), opts.noReport ? null : reportButton(q.gameQuestionId)),
         h("button.btn.primary.block", { onclick: () => next(res, last) }, last ? "Continuer" : "Suivante")));
       feedback.querySelector("button")?.focus();
       if (res.leveledUp) { toast(`Niveau ${lvl(res.level)} atteint !`, "good"); confetti(); }
@@ -145,14 +157,15 @@ export function playStage(opts) {
     }
 
     const card = h("div.q-card",
-      h("div.q-meta", h("span.q-num", `${pos + 1}`, h("small", ` / ${opts.total}`)), opts.label ? h("span.q-label", opts.label) : null),
+      h("div.q-meta", h("span.q-num", `${pos + 1}`, opts.open ? null : h("small", ` / ${opts.total}`)), opts.label ? h("span.q-label", opts.label) : null),
       h("h1.q-text", { tabindex: "-1" }, rich(q.text)),
       unlimited ? null : h("div.time-bar", timeBar));
 
     mount(root, h("div.stage-inner",
       h("div.stage-top",
         h("button.quit", { onclick: opts.onQuit, "aria-label": "Quitter" }, "✕"),
-        h("div.pips", pipEls)),
+        opts.open ? h("div.grow", okEl) : h("div.pips", pipEls),
+        heartsEl),
       hud,
       h("div.q-wrap", card, h("div.answers", buttons)),
       feedback));

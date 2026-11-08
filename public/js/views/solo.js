@@ -2,6 +2,7 @@ import { h, get, post, del, fail, icon, confetti, toast, chapStyle, rich } from 
 import { S, activeSubject, go, lvl, loadCatalog } from "../state.js";
 import { playStage } from "../stage.js";
 import { ticketRow, spendTicket } from "../tickets.js";
+import { shareButton } from "../shareResult.js";
 
 export async function soloPickView() {
   const sub = activeSubject();
@@ -11,6 +12,19 @@ export async function soloPickView() {
     get(`/api/subjects/${sub.id}/solo/history`).catch(() => ({ games: [] })),
   ]);
   let chosen = null;
+  const M = status.modes ?? { ADVENTURE: { enabled: true }, SURVIVAL: { enabled: false }, TIMEATTACK: { enabled: false } };
+  const mmss = (sec) => `${Math.floor(sec / 60)} min${sec % 60 ? ` ${sec % 60} s` : ""}`;
+  const MODES = [
+    ["ADVENTURE", "🧭", "Aventure", `${M.ADVENTURE.questions ?? status.questionsPerGame ?? 10} questions`],
+    ["SURVIVAL", "❤️", "Survie", `${M.SURVIVAL.hearts ?? 3} cœurs · ${M.SURVIVAL.questions ?? 15} questions`],
+    ["TIMEATTACK", "⏱️", "Contre la montre", `${mmss(M.TIMEATTACK.durationSec ?? 180)} chrono`],
+  ].filter(([k]) => M[k].enabled);
+  let mode = MODES[0]?.[0] ?? "ADVENTURE";
+  const modeBtns = MODES.map(([k, ico, name, sub]) => {
+    const b = h("button.mode-opt", { type: "button", "aria-pressed": String(k === mode), onclick: () => { mode = k; modeBtns.forEach((x) => x.setAttribute("aria-pressed", String(x === b))); } },
+      h("span.mo-ico", ico), h("strong", name), h("span.muted.small", sub));
+    return b;
+  });
   const start = h("button.btn.primary.block", { disabled: true }, "Lancer la partie");
   const buttons = ch.chapters.map((c) => {
     const b = h("button.chapter", {
@@ -28,7 +42,7 @@ export async function soloPickView() {
   start.onclick = async () => {
     start.disabled = true;
     try {
-      const r = await post("/api/solo/start", { subjectId: sub.id, chapterId: chosen.id });
+      const r = await post("/api/solo/start", { subjectId: sub.id, chapterId: chosen.id, mode });
       if (!r.resumed) await spendTicket(tix); // le ticket part : −1
       go(`/solo/play/${r.game.id}`);
     } catch (e) { fail(e); start.disabled = false; }
@@ -41,7 +55,7 @@ export async function soloPickView() {
       h("span.btn.primary.small", "Reprendre")) : null,
     h("div.tickets-bar", tix),
     ch.chapters.length
-      ? h("section.stack", h("h2", "Chapitre"), h("div.chapters", buttons))
+      ? h("section.stack", MODES.length > 1 ? [h("h2", "Mode de jeu"), h("div.modes-pick", modeBtns)] : null, h("h2", "Chapitre"), h("div.chapters", buttons))
       : h("div.empty", icon("help"), h("p", "Aucun chapitre")),
     ch.chapters.length ? start : null,
     historyBlock(sub, hist.games));
@@ -60,9 +74,9 @@ function historyBlock(sub, games) {
   for (const g of games) {
     const row = h("div.item.hist",
       h("a.grow.hist-link", { href: `#/solo/result/${g.id}` },
-        h("strong", g.chapter?.name ?? "Solo"),
+        h("strong", g.chapter?.name ?? "Solo", g.variant === "SURVIVAL" ? " ❤️" : g.variant === "TIMEATTACK" ? " ⏱️" : ""),
         h("div.muted.small", `${fmtDay(g.at)}${g.status === "ABANDONED" ? " · abandonnée" : ""}`)),
-      h("span.chip", `${g.correct}/${g.total}`),
+      h("span.chip", g.variant === "TIMEATTACK" ? `${g.correct} ✓` : `${g.correct}/${g.total}`),
       h("button.btn.ghost.small.x", { "aria-label": "Supprimer cette partie", onclick: async () => {
         try { await del(`/api/games/${g.id}`); row.remove(); if (!list.children.length) box.remove(); } catch (e) { fail(e); }
       } }, "✕"));
@@ -77,8 +91,11 @@ export async function soloPlayView({ id }, ctx) {
   const { el, cleanup } = playStage({
     total: cur.question.total,
     question: cur.question,
-    label: "Solo",
-    answer: (gq, idx) => post(`/api/solo/${id}/answer`, { gameQuestionId: gq, choiceIndex: idx }),
+    label: cur.question.variant === "SURVIVAL" ? "Survie" : cur.question.variant === "TIMEATTACK" ? "Contre la montre" : "Solo",
+    hearts: cur.question.heartsMax ? { max: cur.question.heartsMax, left: cur.question.hearts } : null,
+    open: cur.question.variant === "TIMEATTACK",
+    okCount: cur.question.okSoFar ?? 0,
+    answer: (gq, idx, timedOut) => post(`/api/solo/${id}/answer`, { gameQuestionId: gq, choiceIndex: idx, ...(timedOut ? { timedOut: true } : {}) }),
     markServed: () => get(`/api/solo/${id}/current`),
     loadNext: async () => {
       const n = await get(`/api/solo/${id}/current`);
@@ -102,11 +119,14 @@ export async function soloResultView({ id }) {
   return h("div.stack",
     h("section.card.center.stack",
       h("div.muted", r.chapter?.name ?? r.chapter ?? ""),
-      h("div.result-score", `${r.correct}/${r.total}`),
+      h("div.result-score", r.variant === "TIMEATTACK" ? `${r.correct}` : `${r.correct}/${r.total}`),
+      r.variant === "TIMEATTACK" ? h("div.muted", `bonne${r.correct > 1 ? "s" : ""} réponse${r.correct > 1 ? "s" : ""} sur ${r.total} question${r.total > 1 ? "s" : ""}`) : null,
+      r.variant === "SURVIVAL" ? h("div.muted", r.status === "FINISHED" && r.answered < r.total ? "Plus de cœurs" : "Parcours terminé") : null,
       h("div", h("span.chip.amber", `+${r.xpEarned} XP`), " ", h("span.chip", `Niveau ${lvl(r.level)}`)),
       r.leveledUp ? h("strong", "Nouveau niveau !") : null),
     h("div.row.wrap",
       h("a.btn.primary.grow", { href: "#/solo" }, "Rejouer"),
+      shareButton({ kind: "Partie solo", title: r.chapter?.name ?? r.chapter ?? "Quiz", big: `${r.correct}/${r.total}`, sub: "bonnes réponses", chips: [`+${r.xpEarned} XP`, `Niveau ${lvl(r.level)}`], footer: ratio >= 0.7 ? "Essaie de faire mieux !" : "Tu fais mieux ?" }),
       h("a.btn.ghost.grow", { href: "#/" }, "Accueil")),
     h("h2", "Correction"),
     reviewList(r.review));

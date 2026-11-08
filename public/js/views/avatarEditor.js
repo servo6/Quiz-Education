@@ -5,7 +5,7 @@ import { drawAvatar, resolveLook, isCustomItem, OPTIONS, PALETTES, COLOR_DEFAULT
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 // Zone de l'avatar affichée dans chaque vignette (x, y, largeur, hauteur) : on zoome sur la partie modifiée.
-const VIEW = {
+export const VIEW = {
   face: [20, 14, 60, 60], eyes: [27, 30, 46, 46], brows: [27, 30, 46, 46], nose: [30, 38, 40, 40], mouth: [30, 46, 40, 40], hair: [12, 4, 76, 76], beard: [22, 32, 56, 56],
   glasses: [24, 32, 52, 52], earrings: [16, 28, 68, 68], headwear: [18, 2, 64, 64], outfit: [6, 36, 88, 88], bg: [0, 0, 100, 100], freckles: [26, 36, 48, 48], mark: [26, 36, 48, 48], blush: [26, 36, 48, 48],
 };

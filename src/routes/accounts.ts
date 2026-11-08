@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { logAction } from "../audit.ts";
-import type { Deps } from "../auth.ts";
+import { COOKIE_NAME, invalidateAuth, type Deps } from "../auth.ts";
+import { finishDuel } from "./duelAsync.ts";
 import { HttpError } from "../http.ts";
 import { hashPassword, verifyPassword } from "../password.ts";
 import { assertCan } from "../permissions.ts";
@@ -20,6 +21,22 @@ export function registerAccountRoutes(app: FastifyInstance, { prisma, auth, limi
     if (currentPassword === newPassword) throw new HttpError(422, "same_password", "Le nouveau mot de passe doit être différent");
     await prisma.user.update({ where: { id: ctx.user.id }, data: { passwordHash: await hashPassword(newPassword) } });
     await logAction(prisma, ctx.user.id, null, "CHANGE_OWN_PASSWORD");
+    return { ok: true };
+  });
+
+  // ── Désactiver son propre compte : il n'est pas supprimé, un administrateur peut le rétablir
+  app.post("/api/me/deactivate", { config: limit(5) }, async (req, reply) => {
+    const ctx = await auth(req);
+    const { password } = z.object({ password: z.string().min(1).max(128) }).parse(req.body);
+    if (ctx.user.role !== "USER") throw new HttpError(403, "forbidden", "Les comptes de gestion se désactivent depuis l'administration");
+    if (!(await verifyPassword(password, ctx.user.passwordHash))) throw new HttpError(401, "wrong_password", "Mot de passe incorrect");
+    const now = new Date();
+    await prisma.user.update({ where: { id: ctx.user.id }, data: { bannedAt: now, deactivatedAt: now } });
+    invalidateAuth(ctx.user.id);
+    const open = await prisma.game.findMany({ where: { mode: "DUEL", status: "IN_PROGRESS", players: { some: { userId: ctx.user.id } } }, select: { id: true } });
+    for (const g of open) await finishDuel(prisma, g.id, "forfeit", ctx.user.id);
+    await logAction(prisma, ctx.user.id, null, "DEACTIVATE_OWN_ACCOUNT", { duelsClosed: open.length });
+    reply.clearCookie(COOKIE_NAME, { path: "/" });
     return { ok: true };
   });
 

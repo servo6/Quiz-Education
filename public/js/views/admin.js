@@ -1,14 +1,17 @@
-import { h, mount, get, post, put, api, fail, toast, errorMessage, icon, rich } from "../lib.js";
+import { h, mount, get, post, put, api, fail, toast, errorMessage, icon, rich, sheet } from "../lib.js";
 import { statsPanel, chatPanel } from "./adminStats.js";
-import { S, go, rerender } from "../state.js";
+import { S, go, rerender, loadCatalog } from "../state.js";
+import { avatarEl } from "../lib.js";
 import { editQuestion, comptes, titres, badges, avatars, download } from "./admin2.js";
 import { appearancePanel, scopedAppearancePanel } from "./appearance.js";
 import { overviewPanel } from "./overview.js";
+import { reportsPanel } from "./adminReports.js";
+import { lessonsPanel } from "./adminLessons.js";
 import { organisations, matieres as matieresView, joueurs, sure } from "./orgs.js";
 
 /** Panneaux d'administration : [clé, libellé, icône]. `scoped` : panneaux de la matière choisie ; `roles` : qui les voit. */
 export const ADMIN_GROUPS = [
-  { name: "Matière", scoped: true, items: [["stats", "Statistiques", "chart"], ["questions", "Questions", "list"], ["corbeille", "Corbeille", "trash"], ["membres", "Membres", "users"], ["reglages", "Réglages", "sliders"], ["apparence", "Apparence", "palette", ["SUBJECT_MANAGER"]], ["journal", "Journal", "journal"]] },
+  { name: "Matière", scoped: true, items: [["stats", "Statistiques", "chart"], ["questions", "Questions", "list"], ["cours", "Cours", "list"], ["signalements", "Signalements", "help"], ["corbeille", "Corbeille", "trash"], ["membres", "Membres", "users"], ["reglages", "Réglages", "sliders"], ["apparence", "Apparence", "palette", ["SUBJECT_MANAGER"]], ["journal", "Journal", "journal"]] },
   { name: "Organisation", roles: ["ADMIN", "ORG_ADMIN"], items: [["apercu", "Vue d'ensemble", "chart"], ["organisations", "Organisations", "layers"], ["matieres", "Matières", "book"], ["joueurs", "Joueurs", "users"], ["globaux", "Réglages de l'organisation", "sliders", ["ORG_ADMIN"]], ["apparence", "Apparence", "palette", ["ORG_ADMIN"]], ["journalg", "Journal général", "journal"]] },
   { name: "Plateforme", roles: ["ADMIN"], items: [["comptes", "Comptes", "shield"], ["globaux", "Réglages globaux", "sliders", ["ADMIN"]], ["messagerie", "Messagerie", "chat"], ["titres", "Titres", "layers"], ["badges", "Badges", "award"], ["avatars", "Avatars", "image"], ["apparence", "Apparence", "palette", ["ADMIN"]]] },
 ];
@@ -51,7 +54,7 @@ export async function adminView({ tab }) {
   if (!tab || !flat.some((x) => x.it[0] === tab)) { go(`/admin/${S.me.user.role === "SUBJECT_MANAGER" ? "stats" : S.me.user.role === "ORG_ADMIN" || S.me.user.role === "ADMIN" ? "apercu" : sub ? "stats" : "matieres"}`); return h("div"); }
   const { it, scoped } = flat.find((x) => x.it[0] === tab);
   const body = h("div.stack", h("div.center", h("div.spinner")));
-  const views = { apercu: () => overviewPanel(), stats: statsPanel, messagerie: () => chatPanel(), globaux: () => (S.me.user.role === "ADMIN" ? reglages(null) : orgReglages()), journalg: () => journal(null, true), questions, corbeille, membres, reglages, journal, matieres: () => matieresView(loadAdminSubjects, chooseAdminSub), organisations, joueurs, comptes, titres, badges, avatars, apparence: (sub) => (S.me.user.role === "ADMIN" ? appearancePanel() : S.me.user.role === "ORG_ADMIN" ? orgAppearance() : subjectAppearance(sub)) };
+  const views = { apercu: () => overviewPanel(), stats: statsPanel, messagerie: () => chatPanel(), globaux: () => (S.me.user.role === "ADMIN" ? reglages(null) : orgReglages()), journalg: () => journal(null, true), questions, signalements: reportsPanel, cours: lessonsPanel, corbeille, membres, reglages, journal, matieres: () => matieresView(loadAdminSubjects, chooseAdminSub), organisations, joueurs, comptes, titres, badges, avatars, apparence: (sub) => (S.me.user.role === "ADMIN" ? appearancePanel() : S.me.user.role === "ORG_ADMIN" ? orgAppearance() : subjectAppearance(sub)) };
   if (scoped && !sub) {
     body.replaceChildren(h("div.empty", icon("book"), h("p", "Aucune matière pour le moment."),
       S.me.user.role !== "SUBJECT_MANAGER" ? h("a.btn.primary", { href: "#/admin/matieres" }, "Créer une matière") : null));
@@ -92,8 +95,39 @@ async function questions(sub) {
         "aria-pressed": String(selected === c.id), style: c.color ? `--chap:${c.color}` : "", onclick: () => { selected = c.id; refresh(); openChapter(c); },
       }, h("strong", c.name), h("span.row", { style: "gap:6px" }, h("span.muted.small", `${c.questionCount} question${c.questionCount > 1 ? "s" : ""}`), chapterChips(c))))) : h("p.muted", "Aucun chapitre. Crée-en un ou importe des questions dans un nouveau chapitre."),
       newChapterForm(),
+      chapters.length > 1 ? h("button.btn.ghost", { type: "button", onclick: () => mergeSheet(chapters) }, "Fusionner des chapitres") : null,
       chapters.length ? h("button.btn.ghost", { onclick: async () => { try { const x = await get(`/api/subjects/${sub.id}/export`); download(`${sub.name.replace(/[^\w]+/g, "-")}-questions.json`, x); toast("Export téléchargé", "good"); } catch (e) { fail(e); } } }, "Exporter toute la matière") : null);
     importCard.update(chapters);
+  }
+  /** Fenêtre « Fusionner des chapitres » : on coche les chapitres, puis on nomme le nouveau chapitre. */
+  function mergeSheet(chapters) {
+    sheet("Fusionner des chapitres", (close) => {
+      const checks = chapters.map((c) => h("input", { type: "checkbox", value: c.id, "aria-label": c.name }));
+      const name = h("input.input", { placeholder: "Nom du nouveau chapitre", maxlength: 80, "aria-label": "Nom du nouveau chapitre" });
+      const info = h("p.muted.small");
+      const upd = () => {
+        const picked = chapters.filter((_c, i) => checks[i].checked);
+        info.textContent = picked.length ? `${picked.length} chapitre${picked.length > 1 ? "s" : ""} · ${picked.reduce((n, c) => n + c.questionCount, 0)} questions au total` : "Coche au moins deux chapitres.";
+        if (!name.dataset.touched) name.value = picked.length ? picked.map((c) => c.name).join(" + ").slice(0, 80) : "";
+      };
+      checks.forEach((c) => c.addEventListener("change", upd));
+      name.addEventListener("input", () => { name.dataset.touched = "1"; });
+      upd();
+      return h("form.stack", { onsubmit: async (e) => {
+        e.preventDefault();
+        const picked = chapters.filter((_c, i) => checks[i].checked);
+        if (picked.length < 2) return toast("Choisis au moins deux chapitres", "bad");
+        if (!name.value.trim()) return toast("Donne un nom au nouveau chapitre", "bad");
+        if (!confirm(`Fusionner ${picked.length} chapitres en « ${name.value.trim()} » ? Les questions sont déplacées ; les doublons éventuels sont retirés.`)) return;
+        try {
+          const r = await post(`/api/subjects/${sub.id}/chapters/merge`, { chapterIds: picked.map((c) => c.id), name: name.value.trim() });
+          toast(`Chapitre « ${r.chapter.name} » créé (${r.questions} questions${r.duplicatesRemoved ? `, ${r.duplicatesRemoved} doublon${r.duplicatesRemoved > 1 ? "s" : ""} retiré${r.duplicatesRemoved > 1 ? "s" : ""}` : ""})`, "good");
+          close(); selected = null; detail.replaceChildren(); refresh();
+        } catch (ex) { fail(ex); }
+      } },
+        h("div.stack.tight", chapters.map((c, i) => h("label.row", { style: "gap:10px;cursor:pointer" }, checks[i], h("span.grow", c.name), h("span.muted.small", `${c.questionCount} q.`)))),
+        info, h("div.field", h("label", "Nom du nouveau chapitre"), name), h("button.btn.primary.block", { type: "submit" }, "Fusionner"));
+    });
   }
   function newChapterForm() {
     const name = h("input.input", { placeholder: "Nom du nouveau chapitre", maxlength: 80, "aria-label": "Nom du nouveau chapitre" });
@@ -221,9 +255,9 @@ async function membres(sub) {
   const q = h("input.input", { type: "search", placeholder: "Chercher un membre", "aria-label": "Chercher un membre" });
   const list = h("div.list");
   async function load() {
-    const r = await get(`/api/subjects/${sub.id}/members?q=${encodeURIComponent(q.value)}`);
+    const [r] = await Promise.all([get(`/api/subjects/${sub.id}/members?q=${encodeURIComponent(q.value)}`), loadCatalog().catch(() => null)]);
     list.replaceChildren(...(r.members.length ? r.members.map((m) => h("div.item", { style: "flex-wrap:wrap" },
-      h("span.initial", m.username.slice(0, 1).toUpperCase()),
+      h("span.dav", avatarEl(m.avatar ?? null, S.catalog, 40)),
       h("div.grow", h("strong", m.username), h("div.muted.small", `Niv. ${m.level} · ${m.xp} XP · inscrit le ${fmt(m.joinedAt)}`)),
       m.banned ? h("span.chip.bad", "suspendu") : null,
       h("div.row.wrap",
@@ -241,31 +275,61 @@ async function membres(sub) {
 }
 
 // ───────── Réglages ─────────
-const LABELS = {
-  timePerQuestionSec: ["Solo et duel différé : temps par question (secondes, 0 = illimité)", "number"], soloQuestions: ["Questions par partie solo", "number"], soloGamesPerDay: ["Parties solo par jour (0 = illimité)", "number"],
-  roundsPerDuel: ["Duel différé : manches", "number"], questionsPerRound: ["Duel différé : questions par manche", "number"],
-  liveRoundsPerDuel: ["Duel en direct : manches", "number"], liveQuestionsPerRound: ["Duel en direct : questions par manche", "number"], liveTimePerQuestionSec: ["Duel en direct : temps par question (secondes, 0 = illimité)", "number"], duelDeadlineDays: ["Durée maximale d'un duel (jours)", "number"], maxActiveDuels: ["Duels simultanés par joueur (0 = illimité)", "number"],
-  chapterPickSec: ["Temps pour choisir un chapitre (duel direct, secondes)", "number"], reconnectSec: ["Délai de reconnexion (duel direct, secondes)", "number"], shuffleChoices: ["Mélanger l'ordre des réponses", "bool"],
-  xpPerCorrect: ["XP par bonne réponse", "number"], friendlyWinBonus: ["Bonus de victoire (XP)", "number"], friendlyDrawBonus: ["XP pour chaque joueur en cas d'égalité", "number"],
-  levelBase: ["Courbe de niveaux : base", "number"], levelExponent: ["Courbe de niveaux : exposant", "number"],
-};
+const N = "number", B = "bool";
+/** Un onglet par mode de jeu : chacun a son propre formulaire (les champs sont enregistrés ensemble). */
+const SETTING_TABS = [
+  { id: "general", name: "Général", icon: "⚙️", hint: "Réglages communs à tous les modes.", fields: {
+    soloGamesPerDay: ["Parties solo par jour, tous modes confondus (0 = illimité)", N], shuffleChoices: ["Mélanger l'ordre des réponses", B],
+    xpPerCorrect: ["XP par bonne réponse (aventure et duels)", N], friendlyWinBonus: ["Bonus de victoire en duel (XP)", N], friendlyDrawBonus: ["XP pour chaque joueur en cas d'égalité", N],
+    levelBase: ["Courbe de niveaux : base", N], levelExponent: ["Courbe de niveaux : exposant", N] } },
+  { id: "adventure", name: "Aventure", icon: "🧭", hint: "Le mode solo classique : un chapitre, un nombre fixe de questions.", fields: {
+    adventureEnabled: ["Mode disponible pour les joueurs", B], soloQuestions: ["Questions par partie", N],
+    timePerQuestionSec: ["Temps par question en secondes, 0 = illimité (aussi utilisé par les duels différés)", N] } },
+  { id: "survival", name: "Survie", icon: "❤️", hint: "Le joueur perd un cœur à chaque erreur ou temps écoulé. La partie s'arrête quand il n'en a plus.", fields: {
+    survivalEnabled: ["Mode disponible pour les joueurs", B], survivalHearts: ["Nombre de cœurs", N], survivalQuestions: ["Questions par partie", N],
+    survivalTimePerQuestionSec: ["Temps par question en secondes, 0 = illimité", N], survivalXpPerCorrect: ["XP par bonne réponse", N] } },
+  { id: "attack", name: "Contre la montre", icon: "⏱️", hint: "Un chrono global : le joueur répond au maximum de questions avant la fin du temps.", fields: {
+    attackEnabled: ["Mode disponible pour les joueurs", B], attackDurationSec: ["Durée de la partie en secondes (180 = 3 min)", N],
+    attackMaxQuestions: ["Nombre maximum de questions tirées", N], attackXpPerCorrect: ["XP par bonne réponse", N] } },
+  { id: "duel", name: "Duel différé", icon: "⚔️", hint: "Duels asynchrones. Le temps par question se règle dans l'onglet Aventure.", fields: {
+    roundsPerDuel: ["Manches", N], questionsPerRound: ["Questions par manche", N], duelDeadlineDays: ["Durée maximale d'un duel (jours)", N], maxActiveDuels: ["Duels simultanés par joueur (0 = illimité)", N] } },
+  { id: "live", name: "Duel en direct", icon: "⚡", hint: "Duels synchrones et salons.", fields: {
+    liveRoundsPerDuel: ["Manches", N], liveQuestionsPerRound: ["Questions par manche", N], liveTimePerQuestionSec: ["Temps par question en secondes, 0 = illimité", N],
+    chapterPickSec: ["Temps pour choisir un chapitre (secondes)", N], reconnectSec: ["Délai de reconnexion (secondes)", N] } },
+];
+const LABELS = Object.assign({}, ...SETTING_TABS.map((t) => t.fields));
+let lastSettingsTab = "general";
 async function reglages(sub, org) {
   const G = !sub;
   const base = org ? `/api/organizations/${org.id}/settings` : "/api/settings";
   const r = G ? { ...(await get(base)), subject: {} } : await get(`/api/subjects/${sub.id}`);
   const inputs = {};
-  const fields = Object.entries(LABELS).map(([k, [label, type]]) => {
-    const el = type === "bool" ? h("input", { type: "checkbox", id: "s-" + k, checked: !!r.settings[k] }) : h("input.input", { id: "s-" + k, type: "number", step: k === "levelExponent" ? "0.1" : "1", value: r.settings[k] });
-    inputs[k] = el;
-    return h("div.field", type === "bool" ? h("label.row", el, " " + label) : [h("label", { for: "s-" + k }, label, r.overrides[k] !== undefined ? h("span.chip.amber", { style: "margin-left:8px" }, "personnalisé") : null), el]);
+  const save = async (obj) => { if (G) await put(base, obj); else await patch(`/api/subjects/${sub.id}`, { settings: obj }); };
+  const panels = SETTING_TABS.map((t) => {
+    const fields = Object.entries(t.fields).map(([k, [label, type]]) => {
+      const el = type === B ? h("input", { type: "checkbox", id: "s-" + k, checked: !!r.settings[k] }) : h("input.input", { id: "s-" + k, type: "number", step: k === "levelExponent" ? "0.1" : "1", value: r.settings[k] });
+      inputs[k] = el;
+      return h("div.field", type === B ? h("label.row", el, " " + label) : [h("label", { for: "s-" + k }, label, r.overrides[k] !== undefined ? h("span.chip.amber", { style: "margin-left:8px" }, "personnalisé") : null), el]);
+    });
+    const reset = h("button.btn.ghost.small", { type: "button", onclick: async () => {
+      if (!confirm(`Revenir aux valeurs par défaut pour « ${t.name} » ?`)) return;
+      try { await save(Object.fromEntries(Object.keys(t.fields).map((k) => [k, null]))); toast("Valeurs par défaut rétablies", "good"); rerender(); } catch (ex) { fail(ex); }
+    } }, `Valeurs par défaut de « ${t.name} »`);
+    return h("div.stack", { id: "sp-" + t.id, hidden: t.id !== lastSettingsTab }, h("p.muted.small", t.hint), fields, h("div", reset));
   });
-  const read = () => Object.fromEntries(Object.entries(LABELS).map(([k, [, type]]) => [k, type === "bool" ? inputs[k].checked : Number(inputs[k].value)]));
+  const tabBtns = SETTING_TABS.map((t, i) => h("button", { type: "button", "aria-pressed": String(t.id === lastSettingsTab), onclick: () => {
+    lastSettingsTab = t.id;
+    tabBtns.forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
+    panels.forEach((p, j) => (p.hidden = j !== i));
+  } }, `${t.icon} ${t.name}`));
+  const read = () => Object.fromEntries(Object.entries(LABELS).map(([k, [, type]]) => [k, type === B ? inputs[k].checked : Number(inputs[k].value)]));
   return h("div.stack",
-    h("form.card.stack", { onsubmit: async (e) => { e.preventDefault(); try { const now = read(); const changed = Object.fromEntries(Object.entries(now).filter(([k, v]) => v !== r.settings[k])); if (!Object.keys(changed).length) return toast("Aucun changement"); if (G) await put(base, changed); else await patch(`/api/subjects/${sub.id}`, { settings: changed }); toast("Réglages enregistrés", "good"); rerender(); } catch (ex) { fail(ex); } } },
-      h("h2", G ? (org ? `Réglages de « ${org.name} »` : "Réglages globaux") : "Réglages de la matière"), fields,
+    h("form.card.stack", { onsubmit: async (e) => { e.preventDefault(); try { const now = read(); const changed = Object.fromEntries(Object.entries(now).filter(([k, v]) => v !== r.settings[k])); if (!Object.keys(changed).length) return toast("Aucun changement"); await save(changed); toast("Réglages enregistrés", "good"); rerender(); } catch (ex) { fail(ex); } } },
+      h("h2", G ? (org ? `Réglages de « ${org.name} »` : "Réglages globaux") : "Réglages de la matière"),
+      h("div.seg", { role: "tablist" }, tabBtns), panels,
       h("div.row.wrap", h("button.btn.primary", { type: "submit" }, "Enregistrer"),
-        h("button.btn.ghost", { type: "button", onclick: async () => { if (!confirm("Revenir aux réglages par défaut pour cette matière ?")) return;
-          try { const nul = Object.fromEntries(Object.keys(LABELS).map((k) => [k, null])); if (G) await put(base, nul); else await patch(`/api/subjects/${sub.id}`, { settings: nul }); toast("Réglages par défaut rétablis", "good"); rerender(); } catch (ex) { fail(ex); } } }, "Valeurs par défaut"))),
+        h("button.btn.ghost", { type: "button", onclick: async () => { if (!confirm("Revenir aux réglages par défaut pour tous les modes ?")) return;
+          try { await save(Object.fromEntries(Object.keys(LABELS).map((k) => [k, null]))); toast("Réglages par défaut rétablis", "good"); rerender(); } catch (ex) { fail(ex); } } }, "Tout remettre par défaut"))),
     G ? null : accessForm(sub, r.subject.accessName));
 }
 /** Nom d'accès et mot de passe que les joueurs saisissent pour rejoindre la matière. */
