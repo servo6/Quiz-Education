@@ -116,6 +116,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     mailer: opts.mailer ?? createMailer({ provider: "console" }),
     appUrl: opts.appUrl,
     timezone: opts.timezone ?? DEFAULT_TIMEZONE,
+    secret: opts.jwtSecret,
     limit: (max) => ({ rateLimit: useLimit ? { max, timeWindow: "1 minute" } : false }),
   };
 

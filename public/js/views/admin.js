@@ -7,6 +7,7 @@ import { appearancePanel, scopedAppearancePanel } from "./appearance.js";
 import { overviewPanel } from "./overview.js";
 import { reportsPanel } from "./adminReports.js";
 import { lessonsPanel } from "./adminLessons.js";
+import { shareAccessSheet } from "./shareAccess.js";
 import { organisations, matieres as matieresView, joueurs, sure } from "./orgs.js";
 
 /** Panneaux d'administration : [clé, libellé, icône]. `scoped` : panneaux de la matière choisie ; `roles` : qui les voit. */
@@ -355,7 +356,8 @@ function accessForm(sub, current) {
     try { await patch(`/api/subjects/${sub.id}`, b); toast("Accès mis à jour", "good"); ap.value = ""; } catch (ex) { fail(ex); } } },
     h("h2", "Accès des joueurs"),
     h("div.field", h("label", { for: "acc-n" }, "Nom d'accès"), an), h("div.field", h("label", { for: "acc-p" }, "Nouveau mot de passe d'accès"), ap),
-    h("button.btn", { type: "submit" }, "Mettre à jour"));
+    h("div.row.wrap", h("button.btn", { type: "submit" }, "Mettre à jour"),
+      h("button.btn.primary", { type: "button", onclick: () => shareAccessSheet(sub) }, "Partager le lien d'inscription")));
 }
 
 // ───────── Journal ─────────

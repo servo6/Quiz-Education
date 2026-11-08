@@ -7,6 +7,11 @@ import { pushSection } from "./pushSection.js";
 import { editAvatar } from "./avatarEditor.js";
 
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
+/** Organisation(s) du joueur, ex. « Université de Yaoundé I ». */
+export function orgLine() {
+  const orgs = S.me.organizations ?? [];
+  return orgs.length ? h("div.muted.small", `🏛 ${orgs.map((o) => o.name).join(", ")}`) : null;
+}
 const SKINS = ["#f8d9bd", "#f2c9a0", "#d9a273", "#b07a4f", "#8a5a38", "#5e3b24"];
 
 export async function profileView() {
@@ -26,7 +31,8 @@ export async function profileView() {
       h("div.grow",
         h("h1", S.me.user.username),
         h("div", { style: sub.title?.color ? `color:${sub.title.color};font-weight:700` : "font-weight:700" }, sub.title?.name ?? ""),
-        h("div.muted.small", `${sub.name} · niveau ${sub.level} · ${sub.xp} XP${st.rank ? ` · ${st.rank}e` : ""}`)),
+        h("div.muted.small", `${sub.name} · niveau ${sub.level} · ${sub.xp} XP${st.rank ? ` · ${st.rank}e` : ""}`),
+        orgLine()),
       h("button.btn.small", { onclick: () => editAvatar(cat, () => rerender()) }, "Mon avatar")),
     h("section.stack.tight", h("h2", "Statistiques"),
       h("div.stats",
@@ -48,7 +54,8 @@ export async function profileView() {
     h("section.stack.tight", h("h2", "Compte"),
       h("div.row.wrap",
         h("button.btn", { onclick: passwordSheet }, "Changer le mot de passe"),
-        h("button.btn.ghost", { onclick: async () => { if (!confirm("Te déconnecter ?")) return; await post("/api/auth/logout").catch(() => {}); S.me = null; S.summary = null; rerender(); } }, "Se déconnecter"))));
+        h("button.btn.ghost", { onclick: async () => { if (!confirm("Te déconnecter ?")) return; await post("/api/auth/logout").catch(() => {}); S.me = null; S.summary = null; rerender(); } }, "Se déconnecter")),
+      deleteAccountBlock()));
 }
 
 export function passwordSheet() {
@@ -86,8 +93,12 @@ export async function staffProfileView(logout) {
       h("div.row.wrap",
         h("button.btn", { onclick: passwordSheet }, "Changer le mot de passe"),
         h("button.btn.ghost", { onclick: logout }, "Se déconnecter")),
-      me.user.role !== "ADMIN" ? h("div.stack.tight", h("p.muted.small", "Tu peux supprimer ton compte : tu ne pourras plus te connecter et tu disparaîtras des classements. Rien n'est effacé de la base : le compte est seulement désactivé, et tu pourras te réinscrire plus tard avec le même pseudo et la même adresse e-mail."),
-        h("div", h("button.btn.danger", { onclick: deactivateSheet }, "Supprimer mon compte"))) : null));
+      me.user.role !== "ADMIN" ? deleteAccountBlock() : null));
+}
+
+/** Explication + bouton « Supprimer mon compte » (désactivation : le pseudo et l'e-mail redeviennent libres). */
+function deleteAccountBlock() {
+  return h("div", h("button.btn.danger", { onclick: deactivateSheet }, "Supprimer mon compte"));
 }
 
 function deactivateSheet() {

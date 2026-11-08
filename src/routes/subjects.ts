@@ -9,6 +9,7 @@ import { HttpError } from "../http.ts";
 import { assertCan } from "../permissions.ts";
 import { fakeVerify, hashPassword, verifyPassword } from "../password.ts";
 import { randomBytes } from "node:crypto";
+import { loadShare, saveShare } from "../accessShare.ts";
 import { usernameSchema } from "./auth.ts";
 import { emailSchema } from "./email.ts";
 import { sendVerificationMail, staffDeadline, verificationOverdue } from "../emailService.ts";
@@ -48,7 +49,7 @@ async function globalSettings(prisma: Deps["prisma"]) {
 }
 
 export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
-  const { prisma, auth, limit } = deps;
+  const { prisma, auth, limit, secret } = deps;
   // ── Matières à gérer : super admin = toutes ; admin d'organisation = celles de ses organisations ; responsable = les siennes.
   app.get<{ Querystring: { organizationId?: string } }>("/api/subjects", async (req) => {
     const ctx = await auth(req);
@@ -96,6 +97,7 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
     const subject = await prisma.subject.create({
       data: { organizationId, name: body.name, accessName: name, accessPasswordHash: await hashPassword(body.accessPassword ?? internal) },
     });
+    if (body.accessPassword) await saveShare(prisma, secret, subject.id, body.accessPassword);
     await logAction(prisma, ctx.user.id, subject.id, "CREATE_SUBJECT", { name: subject.name });
     // Un compte de gestion n'est pas un joueur : il choisit seulement la matière qu'il gère.
     if (!ctx.user.activeSubjectId) {
@@ -143,7 +145,7 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
       if (await prisma.subject.findUnique({ where: { accessName: body.accessName } })) throw new HttpError(409, "access_name_taken", "Ce nom d'accès est déjà utilisé");
       data.accessName = body.accessName;
     }
-    if (body.accessPassword !== undefined) data.accessPasswordHash = await hashPassword(body.accessPassword);
+    if (body.accessPassword !== undefined) { data.accessPasswordHash = await hashPassword(body.accessPassword); await saveShare(prisma, secret, subject.id, body.accessPassword); }
     if (body.settings !== undefined) {
       data.settings = JSON.stringify(applyPatch(parseStoredSettings(subject.settings), body.settings));
     }
@@ -155,6 +157,25 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
       subject: { id: updated.id, name: updated.name },
       overrides: parseStoredSettings(updated.settings),
     };
+  });
+
+  // ── Lien de partage des clés d'accès (réservé à qui gère les accès de la matière).
+  // Sans mot de passe dans le corps, on utilise celui que le responsable a déjà confié ; sinon il le saisit une fois (vérifié) et il est mémorisé.
+  app.post<{ Params: { id: string } }>("/api/subjects/:id/share", { config: limit(20) }, async (req) => {
+    const ctx = await auth(req);
+    const subject = await loadSubject(prisma, req.params.id);
+    assertCan(ctx.actor, "subject:access", subject.id);
+    const { accessPassword } = z.object({ accessPassword: z.string().min(1).max(128).optional() }).parse(req.body ?? {});
+    let password: string | null;
+    if (accessPassword !== undefined) {
+      if (!(await verifyPassword(accessPassword, subject.accessPasswordHash))) throw new HttpError(401, "bad_access", "Ce n'est pas le mot de passe d'accès actuel de la matière");
+      await saveShare(prisma, secret, subject.id, accessPassword);
+      password = accessPassword;
+    } else {
+      password = await loadShare(prisma, secret, subject.id);
+    }
+    if (!password) throw new HttpError(409, "share_unavailable", "Entre une fois le mot de passe d'accès de la matière pour pouvoir créer le lien");
+    return { subject: { id: subject.id, name: subject.name }, accessName: subject.accessName, accessPassword: password };
   });
 
   // ── Rejoindre une matière avec ses clés d'accès : l'organisation en découle. Un joueur n'appartient qu'à une organisation.

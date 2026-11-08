@@ -56,6 +56,7 @@ export function registerAdminRoutes(app: FastifyInstance, { prisma, auth }: Deps
         await tx.user.updateMany({ where: { activeSubjectId: subjectId }, data: { activeSubjectId: null } });
         // Un responsable sans matière reste un compte de gestion (jamais un joueur).
         await tx.setting.deleteMany({ where: { key: `ui.theme:subject:${subjectId}` } });
+        await tx.setting.deleteMany({ where: { key: `share:${subjectId}` } });
         await tx.subject.delete({ where: { id: subjectId } });
         await logAction(tx, ctx.user.id, subjectId, "DELETE_SUBJECT", { name: subject.name, ...counts });
         return counts;

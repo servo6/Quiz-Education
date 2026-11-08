@@ -66,11 +66,20 @@ async function render() {
   // Liens reçus par e-mail : accessibles connecté ou non
   const link = /^#\/(reset|verify-email)\/([\w-]+)$/.exec(location.hash);
   if (link) { shell = null; mount(appEl, link[1] === "reset" ? resetView(link[2]) : verifyView(link[2])); return; }
+  // Lien d'inscription partagé par un responsable : #/join?n=<nom d'accès>&c=<code>. On le garde en mémoire (même après connexion), puis on nettoie l'adresse.
+  const inv = /^#\/join\?(.*)$/.exec(location.hash);
+  if (inv) {
+    const q = new URLSearchParams(inv[1]);
+    if (q.get("n") && q.get("c")) setInvite({ name: q.get("n"), password: q.get("c") });
+    history.replaceState(null, "", location.pathname + location.search + "#/");
+  }
   if (!S.me) await loadMe();
   if (my !== token) return;
-  if (!S.me) { shell = null; socket?.disconnect(); socket = null; mount(appEl, authView(boot)); return; }
+  if (!S.me) { shell = null; socket?.disconnect(); socket = null; mount(appEl, authView(boot, { invite: !!getInvite() })); return; }
   const admin = S.me.user.role !== "USER"; // comptes de gestion : jamais des joueurs
   themeConfig.ignorePersonal = admin; themeConfig.scopeTheme = S.me.themeDefault ?? null; applyTheme();
+  if (admin) setInvite(null); // un compte de gestion ne rejoint pas de matière
+  if (!admin && getInvite()) { shell = null; mount(appEl, joinScreen(getInvite())); return; }
   if (!admin && !S.me.subjects.length) { shell = null; mount(appEl, joinScreen()); return; }
   if (!admin && !activeSubject()) {
     await post("/api/me/active-subject", { subjectId: S.me.subjects[0].id }).catch(() => {});
@@ -210,12 +219,17 @@ function openSubjects() {
     joinForm(async () => { close(); await loadMe(); render(); })));
 }
 
-function joinScreen() {
+const INVITE_KEY = "qp.invite";
+function getInvite() { try { return JSON.parse(sessionStorage.getItem(INVITE_KEY) || "null"); } catch { return null; } }
+function setInvite(v) { try { v ? sessionStorage.setItem(INVITE_KEY, JSON.stringify(v)) : sessionStorage.removeItem(INVITE_KEY); } catch { /* facultatif */ } }
+
+function joinScreen(invite = null) {
   const out = h("button.btn.ghost.block", { onclick: logout }, "Se déconnecter");
+  const later = invite && S.me.subjects.length ? h("button.btn.ghost.block", { onclick: () => { setInvite(null); render(); } }, "Plus tard") : null;
   return h("div.auth", h("div.auth-box",
     h("div.brand", h("div.brand-mark", icon("logo")), h("h1", "Rejoindre une matière"),
-      h("p", "Demande à ton responsable le nom d'accès et le mot de passe de la matière.")),
-    h("div.card", h("div.stack", joinForm(async () => { await loadMe(); render(); }))), out));
+      invite ? null : h("p", "Demande à ton responsable le nom d'accès et le mot de passe de la matière.")),
+    h("div.card", h("div.stack", joinForm(async () => { setInvite(null); await loadMe(); render(); }, invite ?? {}))), later, out));
 }
 
 // ───────── Temps réel (notifications) ─────────

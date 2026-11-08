@@ -2,7 +2,7 @@ import { h, post, fail, errorMessage, icon } from "../lib.js";
 import { loadMe } from "../state.js";
 import { forgotSheet } from "./email.js";
 
-export function authView(onLogged) {
+export function authView(onLogged, opts = {}) {
   let mode = "login";
   const box = h("div.card");
   const err = h("div.error-box", { hidden: true, role: "alert" });
@@ -46,7 +46,7 @@ export function authView(onLogged) {
     h("div.field", h("label", { for: "p" }, "Mot de passe"), pass),
     err, submit, forgot);
   box.append(h("div.tabs", { role: "tablist" }, tabLogin, tabReg), form);
-  set("login");
+  set(opts.invite ? "register" : "login");
 
   return h("div.auth", h("div.auth-box",
     h("div.brand",
@@ -57,9 +57,9 @@ export function authView(onLogged) {
 }
 
 /** Rejoindre une matière avec son nom d'accès et son mot de passe (l'organisation en découle). */
-export function joinForm(onJoined) {
-  const name = h("input.input", { id: "an", required: true, autocapitalize: "none", spellcheck: "false" });
-  const pw = h("input.input", { id: "ap", type: "password", required: true, autocomplete: "off" });
+export function joinForm(onJoined, prefill = {}) {
+  const name = h("input.input", { id: "an", required: true, autocapitalize: "none", spellcheck: "false", value: prefill.name ?? "" });
+  const pw = h("input.input", { id: "ap", type: "password", required: true, autocomplete: "off", value: prefill.password ?? "" });
   const btn = h("button.btn.primary.block", { type: "submit" }, "Rejoindre");
   return h("form.stack", {
     onsubmit: async (e) => {

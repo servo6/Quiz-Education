@@ -145,3 +145,33 @@ test("les actions d'administration sont journalisées", async () => {
   const n = await env.prisma.adminLog.count({ where: { action: "CREATE_SUBJECT" } });
   assert.ok(n >= 5);
 });
+
+test("lien de partage des clés : mot de passe mémorisé chiffré, réservé à la gestion de la matière", async () => {
+  const sub = (await newSubject("Partage")).json().subject.id as string;
+  const mgr = await newManager(sub, "mgr-partage");
+  const other = (await newSubject("Autre matière")).json().subject.id as string;
+  const user = await register(env, "u-partage");
+  assert.equal((await call(env, user.cookie, "POST", `/api/subjects/${sub}/share`, {})).statusCode, 403);
+  assert.equal((await call(env, mgr.cookie, "POST", `/api/subjects/${other}/share`, {})).statusCode, 403);
+
+  // Aucun mot de passe connu (matière créée sans clés) : il faut le saisir une fois
+  assert.equal((await call(env, mgr.cookie, "POST", `/api/subjects/${sub}/share`, {})).statusCode, 409);
+  const set = await call(env, mgr.cookie, "PATCH", `/api/subjects/${sub}`, { accessName: "partage-x", accessPassword: "secret-partage-1" });
+  assert.equal(set.statusCode, 200);
+  const ok = await call(env, mgr.cookie, "POST", `/api/subjects/${sub}/share`, {});
+  assert.equal(ok.statusCode, 200);
+  assert.deepEqual([ok.json().accessName, ok.json().accessPassword], ["partage-x", "secret-partage-1"]);
+  // Le mot de passe n'est jamais stocké en clair
+  const row = await env.prisma.setting.findUnique({ where: { key: `share:${sub}` } });
+  assert.ok(row && !row.value.includes("secret-partage-1"));
+  // Les clés partagées permettent bien de rejoindre
+  assert.equal((await call(env, user.cookie, "POST", "/api/subjects/join", { accessName: "partage-x", accessPassword: "secret-partage-1" })).statusCode, 200);
+
+  // Matière existante dont le mot de passe n'est pas mémorisé : saisie vérifiée
+  await env.prisma.setting.deleteMany({ where: { key: `share:${sub}` } });
+  assert.equal((await call(env, mgr.cookie, "POST", `/api/subjects/${sub}/share`, {})).statusCode, 409);
+  assert.equal((await call(env, mgr.cookie, "POST", `/api/subjects/${sub}/share`, { accessPassword: "faux-faux-1" })).statusCode, 401);
+  const again = await call(env, mgr.cookie, "POST", `/api/subjects/${sub}/share`, { accessPassword: "secret-partage-1" });
+  assert.equal(again.json().accessPassword, "secret-partage-1");
+  assert.equal((await call(env, mgr.cookie, "POST", `/api/subjects/${sub}/share`, {})).statusCode, 200);
+});

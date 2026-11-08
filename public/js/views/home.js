@@ -5,6 +5,7 @@ import { leagueCard } from "./league.js";
 import { reviewCard } from "./review.js";
 import { examCard } from "./exam.js";
 import { dailyCard } from "./daily.js";
+import { orgLine } from "./profile.js";
 import { ticketRow, loadTickets } from "../tickets.js";
 
 export async function homeView() {
@@ -29,6 +30,7 @@ export async function homeView() {
       h("div",
         h("div.title", { style: sub.title?.color ? `color:${sub.title.color}` : "" }, sub.title?.name ?? ""),
         h("h1", S.me.user.username),
+        orgLine(),
         h("div.xpbar", { role: "progressbar", "aria-valuenow": pct, "aria-valuemin": 0, "aria-valuemax": 100, "aria-label": "Progression vers le niveau suivant" }, h("i", { style: `width:${pct}%` })),
         h("div.xptext", `Niveau ${sub.level} · ${sub.xpIntoLevel} / ${sub.xpForNext} XP`
           + (board?.you?.rank ? ` · ${board.you.rank}${board.you.rank === 1 ? "er" : "e"} sur ${board.totalPlayers}` : "")))),

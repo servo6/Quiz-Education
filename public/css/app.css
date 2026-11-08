@@ -738,3 +738,5 @@ h1, h2, h3, .q-text { font-family: var(--font-display), var(--font-math); }
 .rvs .dav.big { width: 76px; height: 76px; }
 .rvs .dmid { gap: 8px; }
 .rvs .dscore { font-size: 2.4rem; }
+
+textarea.input { resize: vertical; min-height: 5em; font: inherit; }

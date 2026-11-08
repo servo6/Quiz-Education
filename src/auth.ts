@@ -23,6 +23,8 @@ export interface Deps {
   appUrl?: string;
   /** Fuseau horaire qui définit un "jour" (ex. Europe/Paris). */
   timezone: string;
+  /** Secret du serveur (chiffrement des mots de passe de partage des matières). */
+  secret: string;
   /** Configuration du rate limit des routes sensibles ; `false` pour le désactiver (tests). */
   limit: (max: number) => { rateLimit: { max: number; timeWindow: string } | false };
 }

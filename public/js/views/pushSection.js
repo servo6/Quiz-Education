@@ -18,8 +18,7 @@ export function pushSection() {
   const box = h("section.card.stack", h("h2", "Notifications"));
   const status = h("p.muted.small");
   const btn = h("button.btn.primary.block", { type: "button", hidden: true });
-  const test = h("button.btn.ghost.block", { type: "button", hidden: true }, "Envoyer une notification de test");
-  box.append(status, btn, test);
+  box.append(status, btn);
 
   (async () => {
     if (!supported()) {
@@ -42,7 +41,6 @@ export function pushSection() {
       btn.hidden = denied;
       btn.textContent = sub ? "Désactiver les notifications" : "Activer les notifications";
       btn.classList.toggle("ghost", !!sub); btn.classList.toggle("primary", !sub);
-      test.hidden = !sub;
     }
     btn.onclick = async () => {
       btn.disabled = true;
@@ -62,7 +60,6 @@ export function pushSection() {
         }
       } catch (e) { fail(e); } finally { btn.disabled = false; paint(); }
     };
-    test.onclick = () => post("/api/push/test").then(() => toast("Notification envoyée", "good")).catch(fail);
     await paint();
     btn.hidden = Notification.permission === "denied";
   })();
