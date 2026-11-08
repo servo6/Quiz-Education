@@ -9,44 +9,69 @@ let audio = null, btn = null, onState = () => {};
 export const voiceSupported = () => !!(navigator.mediaDevices?.getUserMedia && window.RTCPeerConnection);
 const send = (m) => sock?.emit("voice:signal", m, () => {});
 
-async function ensurePc() {
-  if (pc) return pc;
-  if (!iceServers) iceServers = await new Promise((res) => sock.emit("voice:config", {}, (r) => res(r?.iceServers ?? [{ urls: "stun:stun.l.google.com:19302" }])));
-  pc = new RTCPeerConnection({ iceServers });
-  pc.onicecandidate = ({ candidate }) => { if (candidate) send({ candidate }); };
-  pc.ontrack = (e) => { audio.srcObject = e.streams[0] ?? new MediaStream([e.track]); audio.play().catch(() => {}); };
-  pc.onnegotiationneeded = async () => {
-    try { making = true; await pc.setLocalDescription(); send({ description: pc.localDescription }); }
-    catch (e) { console.error(e); } finally { making = false; }
-  };
-  pc.onconnectionstatechange = () => { if (pc?.connectionState === "failed") { toast("Connexion vocale impossible sur ce réseau", "bad"); } };
-  // Toujours prêt à recevoir l'audio de l'autre, même micro coupé.
-  pc.addTransceiver("audio", { direction: "recvonly" });
-  return pc;
+let pcPromise = null, queue = Promise.resolve(), pending = [];
+
+function ensurePc() {
+  if (pc) return Promise.resolve(pc);
+  if (pcPromise) return pcPromise;
+  pcPromise = (async () => {
+    if (!iceServers) iceServers = await new Promise((res) => {
+      const t = setTimeout(() => res([{ urls: "stun:stun.l.google.com:19302" }]), 4000);
+      sock.emit("voice:config", {}, (r) => { clearTimeout(t); res(r?.iceServers ?? [{ urls: "stun:stun.l.google.com:19302" }]); });
+    });
+    const p = new RTCPeerConnection({ iceServers });
+    p.onicecandidate = ({ candidate }) => { if (candidate) send({ candidate }); };
+    p.ontrack = (e) => { audio.srcObject = e.streams[0] ?? new MediaStream([e.track]); playAudio(); };
+    p.onnegotiationneeded = async () => {
+      try { making = true; await p.setLocalDescription(); send({ description: p.localDescription }); }
+      catch (e) { console.error(e); } finally { making = false; }
+    };
+    p.onconnectionstatechange = () => {
+      if (p.connectionState === "failed") { try { p.restartIce(); } catch { /* ignoré */ } toast("Connexion vocale impossible sur ce réseau", "bad"); }
+    };
+    // Toujours prêt à recevoir l'audio de l'autre, même micro coupé.
+    p.addTransceiver("audio", { direction: "recvonly" });
+    pc = p; pending = [];
+    return p;
+  })().finally(() => { pcPromise = null; });
+  return pcPromise;
 }
 
-async function onSignal({ description, candidate, bye }) {
+function playAudio() {
+  if (!audio) return;
+  audio.muted = false; audio.volume = 1;
+  audio.play().catch(() => {
+    // Lecture bloquée par le navigateur : on réessaie dès le prochain geste de l'utilisateur.
+    const retry = () => { audio.play().catch(() => {}); };
+    window.addEventListener("pointerdown", retry, { once: true });
+    window.addEventListener("keydown", retry, { once: true });
+  });
+}
+
+// Les signaux sont traités un par un, dans l'ordre d'arrivée.
+function onSignal(m) { queue = queue.then(() => handleSignal(m)).catch((e) => console.error(e)); }
+
+async function handleSignal({ description, candidate, bye }) {
   if (!active) return;
   if (bye) { closePc(); return; }
-  try {
-    const p = await ensurePc();
-    if (description) {
-      const collision = description.type === "offer" && (making || p.signalingState !== "stable");
-      ignoreOffer = !polite && collision;
-      if (ignoreOffer) return;
-      await p.setRemoteDescription(description);
-      if (description.type === "offer") {
-        // Si l'autre parle et pas moi, ma partie reste en réception seule.
-        await p.setLocalDescription();
-        send({ description: p.localDescription });
-      }
-    } else if (candidate) {
-      try { await p.addIceCandidate(candidate); } catch (e) { if (!ignoreOffer) throw e; }
+  const p = await ensurePc();
+  if (description) {
+    const collision = description.type === "offer" && (making || p.signalingState !== "stable");
+    ignoreOffer = !polite && collision;
+    if (ignoreOffer) return;
+    await p.setRemoteDescription(description);
+    for (const c of pending.splice(0)) { try { await p.addIceCandidate(c); } catch (e) { console.error(e); } }
+    if (description.type === "offer") {
+      await p.setLocalDescription();
+      send({ description: p.localDescription });
     }
-  } catch (e) { console.error(e); }
+  } else if (candidate) {
+    if (!p.remoteDescription) { pending.push(candidate); return; }
+    try { await p.addIceCandidate(candidate); } catch (e) { if (!ignoreOffer) console.error(e); }
+  }
 }
 
-function closePc() { try { pc?.close(); } catch { /* déjà fermé */ } pc = null; if (audio) audio.srcObject = null; }
+function closePc() { try { pc?.close(); } catch { /* déjà fermé */ } pc = null; pending = []; if (audio) audio.srcObject = null; }
 
 async function setMic(on) {
   if (on) {
@@ -94,7 +119,10 @@ export function initVoice(socket) {
 /** Appelé à chaque rendu du duel : `game` = partie en cours (ou null). */
 export function voiceSync(game, myId) {
   const now = !!game && game.phase !== "DONE";
-  if (now && !active) { active = true; polite = String(myId) < String(game.opponent?.id ?? ""); }
+  if (now && !active) {
+    active = true; polite = String(myId) < String(game.opponent?.id ?? "");
+    ensurePc().catch((e) => console.error(e)); // connexion prête dès le début, micro coupé
+  }
   if (!now && active) stopVoice();
   paint();
 }
@@ -103,5 +131,5 @@ export function stopVoice() {
   if (active && sock) send({ bye: true });
   active = false; micOn = false;
   stream?.getTracks().forEach((t) => t.stop()); stream = null; track = null;
-  closePc(); iceServers = null; paint();
+  closePc(); iceServers = null; pcPromise = null; paint();
 }
