@@ -1,3 +1,4 @@
+import { originalEmail, originalUsername } from "../accountArchive.ts";
 import { parseAvatar } from "../avatar.ts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -120,7 +121,16 @@ export function registerMemberRoutes(app: FastifyInstance, { prisma, auth }: Dep
     const u = await targetUser(req.params.id);
     await assertAccountInReach(prisma, ctx, u);
     if (!u.bannedAt) throw new HttpError(409, "not_banned", "Ce compte n'est pas suspendu");
-    await prisma.user.update({ where: { id: u.id }, data: { bannedAt: null, deactivatedAt: null } });
+    const restore: { username?: string; email?: string | null } = {};
+    if (u.deactivatedAt) {
+      const name = originalUsername(u.username);
+      const mail = originalEmail(u.email);
+      if (name !== u.username && (await prisma.user.findUnique({ where: { username: name } }))) throw new HttpError(409, "username_taken", `Le pseudo « ${name} » est maintenant utilisé par un autre compte`);
+      if (mail && mail !== u.email && (await prisma.user.findUnique({ where: { email: mail } }))) restore.email = null;
+      else if (mail !== u.email) restore.email = mail;
+      if (name !== u.username) restore.username = name;
+    }
+    await prisma.user.update({ where: { id: u.id }, data: { bannedAt: null, deactivatedAt: null, ...restore } });
     await logAction(prisma, ctx.user.id, null, "UNBAN_USER", { userId: u.id, username: u.username });
     return { ok: true };
   });

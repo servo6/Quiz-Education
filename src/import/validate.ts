@@ -234,3 +234,66 @@ export function validateImport(raw: string, options: ValidateOptions = {}): Impo
 
   return report;
 }
+
+// ───────── Import par chapitres ─────────
+/**
+ * Format multi-chapitres (celui de l'export d'une matière) :
+ * { "subject": "…", "chapters": [ { "name": "Chapitre 1", "questions": [ …questions… ] }, … ] }
+ * Les clés « subject » et « exportedAt » sont ignorées.
+ */
+export interface ChapterBlock {
+  name: string;
+  /** Bloc de questions de ce chapitre, sérialisé : directement utilisable par validateImport. */
+  raw: string;
+}
+export type MultiChapterParse =
+  | { kind: "multi"; chapters: ChapterBlock[] }
+  | { kind: "error"; fatalError: string }
+  | { kind: "single" };
+
+export function parseMultiChapter(raw: string): MultiChapterParse {
+  const source = stripCodeFence(raw);
+  if (!source.startsWith("{")) return { kind: "single" };
+  let data: unknown;
+  try {
+    data = JSON.parse(source);
+  } catch {
+    return { kind: "single" }; // l'erreur de syntaxe sera décrite par validateImport
+  }
+  if (!isRecord(data) || !Array.isArray(data.chapters)) return { kind: "single" };
+  if (data.chapters.length === 0) return { kind: "error", fatalError: "La liste de chapitres est vide." };
+  if (data.chapters.length > 200) return { kind: "error", fatalError: `Trop de chapitres d'un coup : ${data.chapters.length} (maximum 200).` };
+  const chapters: ChapterBlock[] = [];
+  const names = new Set<string>();
+  let total = 0;
+  for (const [i, c] of data.chapters.entries()) {
+    if (!isRecord(c)) return { kind: "error", fatalError: `Le chapitre n°${i + 1} doit être un objet { "name": "…", "questions": [ … ] }.` };
+    const name = typeof c.name === "string" ? normalize(c.name) : "";
+    if (!name) return { kind: "error", fatalError: `Le chapitre n°${i + 1} n'a pas de nom ("name").` };
+    if (name.length > 80) return { kind: "error", fatalError: `Le nom du chapitre n°${i + 1} dépasse 80 caractères.` };
+    if (!Array.isArray(c.questions)) return { kind: "error", fatalError: `Le chapitre « ${name} » doit contenir une liste "questions".` };
+    if (names.has(name.toLowerCase())) return { kind: "error", fatalError: `Deux chapitres portent le même nom : « ${name} ».` };
+    names.add(name.toLowerCase());
+    total += c.questions.length;
+    chapters.push({ name, raw: JSON.stringify(c.questions) });
+  }
+  if (total > LIMITS.maxQuestionsPerImport) {
+    return { kind: "error", fatalError: `Trop de questions d'un coup : ${total} (maximum ${LIMITS.maxQuestionsPerImport} par import). Découpe le fichier en plusieurs imports.` };
+  }
+  return { kind: "multi", chapters };
+}
+
+/** Couleurs de chapitres : teinte de départ aléatoire, puis pas de l'angle d'or pour que les couleurs restent bien distinctes. */
+export function randomChapterColors(count: number, random: () => number = Math.random): string[] {
+  const start = random() * 360;
+  const hsl = (h: number, s: number, l: number) => {
+    const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12;
+      const v = l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return Math.round(255 * v).toString(16).padStart(2, "0");
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+  return Array.from({ length: count }, (_, i) => hsl((start + i * 137.508) % 360, 62 + Math.floor(random() * 14), 46 + Math.floor(random() * 8)));
+}

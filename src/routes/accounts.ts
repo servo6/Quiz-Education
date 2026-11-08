@@ -5,6 +5,7 @@ import { COOKIE_NAME, invalidateAuth, type Deps } from "../auth.ts";
 import { finishDuel } from "./duelAsync.ts";
 import { HttpError } from "../http.ts";
 import { hashPassword, verifyPassword } from "../password.ts";
+import { archivedEmail, archivedUsername } from "../accountArchive.ts";
 import { assertCan } from "../permissions.ts";
 import { startOfDay } from "../time.ts";
 
@@ -24,14 +25,18 @@ export function registerAccountRoutes(app: FastifyInstance, { prisma, auth, limi
     return { ok: true };
   });
 
-  // ── Désactiver son propre compte : il n'est pas supprimé, un administrateur peut le rétablir
+  // ── Désactiver son propre compte : il n'est pas supprimé (un administrateur peut le rétablir), mais le pseudo et l'e-mail sont libérés
   app.post("/api/me/deactivate", { config: limit(5) }, async (req, reply) => {
     const ctx = await auth(req);
     const { password } = z.object({ password: z.string().min(1).max(128) }).parse(req.body);
-    if (ctx.user.role !== "USER") throw new HttpError(403, "forbidden", "Les comptes de gestion se désactivent depuis l'administration");
+    if (ctx.user.role === "ADMIN") throw new HttpError(403, "forbidden", "Le super administrateur ne peut pas désactiver son compte");
     if (!(await verifyPassword(password, ctx.user.passwordHash))) throw new HttpError(401, "wrong_password", "Mot de passe incorrect");
     const now = new Date();
-    await prisma.user.update({ where: { id: ctx.user.id }, data: { bannedAt: now, deactivatedAt: now } });
+    await prisma.user.update({ where: { id: ctx.user.id }, data: {
+      bannedAt: now, deactivatedAt: now,
+      username: archivedUsername(ctx.user.username, ctx.user.id),
+      email: ctx.user.email ? archivedEmail(ctx.user.email, ctx.user.id) : null,
+    } });
     invalidateAuth(ctx.user.id);
     const open = await prisma.game.findMany({ where: { mode: "DUEL", status: "IN_PROGRESS", players: { some: { userId: ctx.user.id } } }, select: { id: true } });
     for (const g of open) await finishDuel(prisma, g.id, "forfeit", ctx.user.id);

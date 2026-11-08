@@ -1,3 +1,4 @@
+import { originalEmail, originalUsername } from "../accountArchive.ts";
 import { parseAvatar } from "../avatar.ts";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -269,7 +270,7 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
     });
     const page = rows.slice(0, q.limit);
     return {
-      users: page.map(({ _count, bannedAt, deactivatedAt, emailVerifiedAt, orgMemberships, adminOrgs, ...u }) => ({ ...u, avatar: parseAvatar(u.avatar), organizations: [...new Set([...adminOrgs, ...orgMemberships].map((o) => o.organization.name))].sort((a, b) => a.localeCompare(b)), deactivated: !!deactivatedAt, emailVerified: !!emailVerifiedAt, overdue: verificationOverdue({ role: u.role, emailVerifiedAt, verifyDeadline: u.verifyDeadline }), banned: !!bannedAt, subjectCount: _count.memberships })),
+      users: page.map(({ _count, bannedAt, deactivatedAt, emailVerifiedAt, orgMemberships, adminOrgs, ...u }) => ({ ...u, username: originalUsername(u.username), email: originalEmail(u.email), avatar: parseAvatar(u.avatar), organizations: [...new Set([...adminOrgs, ...orgMemberships].map((o) => o.organization.name))].sort((a, b) => a.localeCompare(b)), deactivated: !!deactivatedAt, emailVerified: !!emailVerifiedAt, overdue: verificationOverdue({ role: u.role, emailVerifiedAt, verifyDeadline: u.verifyDeadline }), banned: !!bannedAt, subjectCount: _count.memberships })),
       nextCursor: rows.length > q.limit ? page[page.length - 1].id : null,
     };
   });

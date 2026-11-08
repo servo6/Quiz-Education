@@ -187,14 +187,18 @@ function importCardFor(sub, onDone) {
   const newPick = colorPicker("");
   const newLock = h("input", { type: "checkbox", id: "imp-lock" });
   const newOpts = h("div.stack.tight", { hidden: true }, h("div.field", h("label", "Couleur du nouveau chapitre"), newPick.el), h("label.row", { for: "imp-lock" }, newLock, " Bloquer l'accès (caché des joueurs)"));
-  const raw = h("textarea.input", { rows: 8, placeholder: '[\n  { "question": "…", "choices": ["A", "B", "C", "D"], "answer": 1, "explanation": "…" }\n]', style: "font-family:ui-monospace,monospace;font-size:.85rem", spellcheck: "false", "aria-label": "Questions au format JSON" });
-  const file = h("input", { type: "file", accept: ".json,application/json", onchange: async () => { if (file.files[0]) raw.value = await file.files[0].text(); preview.replaceChildren(); } });
+  const multiNote = h("p.muted.small", { hidden: true }, "Fichier à plusieurs chapitres détecté : les chapitres manquants sont créés automatiquement (couleurs aléatoires) et les questions ajoutées dans chacun. Le chapitre cible ci-dessus est ignoré.");
+  const raw = h("textarea.input", { rows: 8, placeholder: '[\n  { "question": "…", "choices": ["A", "B", "C", "D"], "answer": 1, "explanation": "…" }\n]\n\nou plusieurs chapitres d\'un coup :\n{ "chapters": [ { "name": "Chapitre 1", "questions": [ … ] } ] }', style: "font-family:ui-monospace,monospace;font-size:.85rem", spellcheck: "false", "aria-label": "Questions au format JSON" });
+  const syncMulti = () => { const m = isMulti(); multiNote.hidden = !m; target.hidden = m; if (m) { newName.hidden = true; newOpts.hidden = true; } else target.onchange(); };
+  const file = h("input", { type: "file", accept: ".json,application/json", onchange: async () => { if (file.files[0]) raw.value = await file.files[0].text(); preview.replaceChildren(); syncMulti(); } });
   const strict = h("input", { type: "checkbox", id: "strict" });
   const preview = h("div.stack.tight");
   let ok = false;
   const commit = h("button.btn.primary", { disabled: true, onclick: doCommit }, "Importer");
   const check = h("button.btn", { onclick: doCheck }, "Vérifier");
-  const payload = () => ({ raw: raw.value, mode: strict.checked ? "all_or_nothing" : "partial", ...(target.value === "__new" ? { newChapterName: newName.value.trim(), newChapterColor: newPick.value, newChapterLocked: newLock.checked } : { chapterId: target.value }) });
+  /** Fichier au format d'export { "chapters": [ { "name", "questions" } ] } : les chapitres sont créés d'après le fichier. */
+  const isMulti = () => { try { const d = JSON.parse(raw.value.replace(/^\uFEFF/, "").trim()); return !!d && !Array.isArray(d) && Array.isArray(d.chapters); } catch { return false; } };
+  const payload = () => ({ raw: raw.value, mode: strict.checked ? "all_or_nothing" : "partial", ...(isMulti() ? {} : target.value === "__new" ? { newChapterName: newName.value.trim(), newChapterColor: newPick.value, newChapterLocked: newLock.checked } : { chapterId: target.value }) });
   target.onchange = () => { newName.hidden = target.value !== "__new"; newOpts.hidden = target.value !== "__new"; };
   async function doCheck() {
     if (!raw.value.trim()) return toast("Colle ou charge des questions d'abord", "bad");
@@ -203,6 +207,15 @@ function importCardFor(sub, onDone) {
       const r = await post(`/api/subjects/${sub.id}/import/preview`, payload());
       ok = r.canImport;
       commit.disabled = !ok;
+      if (r.multi) {
+        mount(preview,
+          h("div.row.wrap", h("span.chip.good", `${r.validCount} valide${r.validCount > 1 ? "s" : ""}`), h("span.chip", { class: r.errorCount ? "bad" : "" }, `${r.errorCount} erreur${r.errorCount > 1 ? "s" : ""}`), h("span.chip", `${r.duplicateCount} doublon${r.duplicateCount > 1 ? "s" : ""}`),
+            h("span.muted.small", `${r.chapters.length} chapitre${r.chapters.length > 1 ? "s" : ""}`)),
+          r.fatalError ? h("p.error-box", r.fatalError) : null,
+          r.blockedReason && r.blockedReason !== r.fatalError ? h("p.error-box", r.blockedReason) : null,
+          h("ul.small", r.chapters.map((c) => h("li", `${c.name} : ${c.validCount} question${c.validCount > 1 ? "s" : ""}${c.isNew ? " (nouveau chapitre)" : ""}${c.errorCount ? `, ${c.errorCount} erreur${c.errorCount > 1 ? "s" : ""}` : ""}${c.duplicateCount ? `, ${c.duplicateCount} doublon${c.duplicateCount > 1 ? "s" : ""}` : ""}`))));
+        return;
+      }
       mount(preview,
         h("div.row.wrap", h("span.chip.good", `${r.validCount} valide${r.validCount > 1 ? "s" : ""}`), h("span.chip", { class: r.errorCount ? "bad" : "" }, `${r.errorCount} erreur${r.errorCount > 1 ? "s" : ""}`), h("span.chip", `${r.duplicateCount} doublon${r.duplicateCount > 1 ? "s" : ""}`),
           h("span.muted.small", r.chapter.isNew ? `Nouveau chapitre « ${r.chapter.name} »` : `Chapitre « ${r.chapter.name} »`)),
@@ -215,13 +228,13 @@ function importCardFor(sub, onDone) {
     commit.disabled = true;
     try {
       const r = await post(`/api/subjects/${sub.id}/import/commit`, payload());
-      toast(`${r.imported} question${r.imported > 1 ? "s" : ""} importée${r.imported > 1 ? "s" : ""}`, "good");
+      toast(r.multi ? `${r.imported} question${r.imported > 1 ? "s" : ""} importée${r.imported > 1 ? "s" : ""} dans ${r.chapters.length} chapitre${r.chapters.length > 1 ? "s" : ""}` : `${r.imported} question${r.imported > 1 ? "s" : ""} importée${r.imported > 1 ? "s" : ""}`, "good");
       raw.value = ""; file.value = ""; preview.replaceChildren(); onDone();
     } catch (e) { fail(e); commit.disabled = false; }
   }
-  raw.addEventListener("input", () => { ok = false; commit.disabled = true; });
+  raw.addEventListener("input", () => { ok = false; commit.disabled = true; syncMulti(); });
   const el = h("section.card.stack", h("h2", "Importer des questions"),
-    target, newName, newOpts, file, raw,
+    target, newName, newOpts, file, raw, multiNote,
     h("label.row.small", strict, " Tout refuser s'il y a une seule erreur"),
     preview, h("div.row", check, commit));
   return {

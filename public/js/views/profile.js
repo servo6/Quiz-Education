@@ -86,19 +86,19 @@ export async function staffProfileView(logout) {
       h("div.row.wrap",
         h("button.btn", { onclick: passwordSheet }, "Changer le mot de passe"),
         h("button.btn.ghost", { onclick: logout }, "Se déconnecter")),
-      me.user.role === "USER" ? h("div.stack.tight", h("p.muted.small", "Tu peux désactiver ton compte : tu ne pourras plus te connecter et tu disparaîtras des classements. Tes données ne sont pas supprimées et un administrateur peut rétablir le compte."),
-        h("div", h("button.btn.danger", { onclick: deactivateSheet }, "Désactiver mon compte"))) : null));
+      me.user.role !== "ADMIN" ? h("div.stack.tight", h("p.muted.small", "Tu peux supprimer ton compte : tu ne pourras plus te connecter et tu disparaîtras des classements. Rien n'est effacé de la base : le compte est seulement désactivé, et tu pourras te réinscrire plus tard avec le même pseudo et la même adresse e-mail."),
+        h("div", h("button.btn.danger", { onclick: deactivateSheet }, "Supprimer mon compte"))) : null));
 }
 
 function deactivateSheet() {
-  sheet("Désactiver mon compte", (close) => h("form.stack", {
+  sheet("Supprimer mon compte", (close) => h("form.stack", {
     onsubmit: async (e) => {
       e.preventDefault();
       const pw = e.target.elements.pw.value;
-      if (!confirm("Désactiver définitivement l'accès à ton compte ?")) return;
-      try { await post("/api/me/deactivate", { password: pw }); close(); S.me = null; S.summary = null; toast("Compte désactivé"); rerender(); } catch (ex) { fail(ex); }
+      if (!confirm("Supprimer ton compte ? Tu seras déconnecté.")) return;
+      try { await post("/api/me/deactivate", { password: pw }); close(); S.me = null; S.summary = null; toast("Compte supprimé"); rerender(); } catch (ex) { fail(ex); }
     },
   }, h("p", "Tes duels en cours seront perdus et tu seras déconnecté. Entre ton mot de passe pour confirmer."),
     h("input.input", { name: "pw", type: "password", autocomplete: "current-password", placeholder: "Mot de passe", required: true, "aria-label": "Mot de passe" }),
-    h("button.btn.danger.block", { type: "submit" }, "Désactiver mon compte")));
+    h("button.btn.danger.block", { type: "submit" }, "Supprimer mon compte")));
 }

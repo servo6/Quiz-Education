@@ -197,3 +197,58 @@ test("renommer un chapitre : conflit détecté", async () => {
   assert.equal((await call(env, admin, "PATCH", `/api/chapters/${a.id}`, { name: "Moyen Âge" })).statusCode, 409);
   assert.equal((await call(env, admin, "PATCH", `/api/chapters/${a.id}`, { name: "Rome" })).json().chapter.name, "Rome");
 });
+
+test("import multi-chapitres : crée les chapitres, couleurs aléatoires distinctes, ajoute dans les chapitres existants", async () => {
+  const subj = (await call(env, admin, "POST", "/api/subjects", { name: "Biologie" })).json().subject.id;
+  const qs = (prefix: string, n: number) => JSON.parse(sampleBlock(n, prefix));
+  const file = { subject: "Biologie", exportedAt: "2026-01-01T00:00:00.000Z", chapters: [
+    { name: "1-cellule", questions: qs("cell", 5) },
+    { name: "2-tissus", questions: qs("tissu", 7) },
+    { name: "3-organes", questions: [...qs("organe", 2), { question: "sans réponse", choices: ["A", "B"], answer: 9 }] },
+  ] };
+  const raw = JSON.stringify(file);
+
+  const prev = await call(env, admin, "POST", importUrl(subj, "preview"), { raw });
+  assert.equal(prev.statusCode, 200, prev.body);
+  assert.equal(prev.json().multi, true);
+  assert.equal(prev.json().validCount, 14);
+  assert.equal(prev.json().errorCount, 1);
+  assert.equal(prev.json().chapters.length, 3);
+  assert.equal(await env.prisma.chapter.count({ where: { subjectId: subj } }), 0);
+
+  const strict = await call(env, admin, "POST", importUrl(subj, "commit"), { raw, mode: "all_or_nothing" });
+  assert.equal(strict.statusCode, 422);
+  assert.equal(await env.prisma.chapter.count({ where: { subjectId: subj } }), 0);
+
+  const res = await call(env, admin, "POST", importUrl(subj, "commit"), { raw });
+  assert.equal(res.statusCode, 201, res.body);
+  assert.equal(res.json().imported, 14);
+  assert.equal(res.json().skippedInvalid, 1);
+  const chapters = await env.prisma.chapter.findMany({ where: { subjectId: subj }, orderBy: { name: "asc" }, include: { _count: { select: { questions: true } } } });
+  assert.deepEqual(chapters.map((c) => [c.name, c._count.questions]), [["1-cellule", 5], ["2-tissus", 7], ["3-organes", 2]]);
+  for (const c of chapters) assert.match(c.color, /^#[0-9a-f]{6}$/);
+  assert.equal(new Set(chapters.map((c) => c.color)).size, 3);
+
+  // Deuxième passage : les chapitres existent, les doublons sont ignorés, les nouvelles questions sont ajoutées.
+  const again = await call(env, admin, "POST", importUrl(subj, "commit"), { raw: JSON.stringify({ chapters: [{ name: "1-cellule", questions: [...qs("cell", 5), ...qs("nouvelle", 3)] }] }) });
+  assert.equal(again.statusCode, 201, again.body);
+  assert.equal(again.json().imported, 3);
+  assert.equal(again.json().skippedDuplicates, 5);
+  assert.equal(again.json().chapters[0].isNew, false);
+  assert.equal(await env.prisma.chapter.count({ where: { subjectId: subj } }), 3);
+});
+
+test("import multi-chapitres : fichiers invalides refusés", async () => {
+  const subj = (await call(env, admin, "POST", "/api/subjects", { name: "Physique" })).json().subject.id;
+  const bad = [
+    { chapters: [] },
+    { chapters: [{ name: "A", questions: [] }, { name: "a", questions: [] }] },
+    { chapters: [{ questions: [] }] },
+    { chapters: [{ name: "A" }] },
+  ];
+  for (const b of bad) {
+    const r = await call(env, admin, "POST", importUrl(subj, "commit"), { raw: JSON.stringify(b) });
+    assert.equal(r.statusCode, 422, JSON.stringify(b));
+  }
+  assert.equal(await env.prisma.chapter.count({ where: { subjectId: subj } }), 0);
+});
