@@ -148,6 +148,7 @@ test("victoire : +40 au gagnant, et le score adverse reste caché pendant la par
   d = await detail(a.cookie, id);
   assert.deepEqual(d.rounds[0].opponent, { correct: 1 }); // les deux ont joué la manche 1 : visible
   assert.equal(d.duel.score.opponent, null); // mais pas le total tant que le duel court
+  assert.equal(d.duel.score.opponentSoFar, 1); // le score "vu" progresse au fil des questions
   await pick(b.cookie, id, chB);
   await playRound(b.cookie, id, 3); // 0/3
   await playRound(a.cookie, id); // A : manche 2 3/3
@@ -257,4 +258,22 @@ test("liste de mes duels : à mon tour / en attente, accès réservé aux membre
   const outsider = await player("histoire");
   assert.equal((await call(env, outsider.cookie, "GET", `/api/subjects/${subjectId}/duels`)).statusCode, 403);
   assert.equal((await call(env, outsider.cookie, "GET", `/api/duels/${la.duels[0].id}`)).statusCode, 404);
+});
+
+test("duel différé : l'adversaire déjà passé est révélé question par question (choix + score progressif)", async () => {
+  await settings({ roundsPerDuel: 2, questionsPerRound: 3 });
+  const [a, b] = [await player(), await player()];
+  const id = (await create(a.cookie, b.id)).json().duel.id as string;
+  await playRound(a.cookie, id); // A : 3/3
+  const cur0 = (await call(env, b.cookie, "GET", `/api/duels/${id}/current`)).json();
+  assert.deepEqual(cur0.scores, { you: 0, opponent: 0 });
+  let first = true;
+  for (let i = 0; i < 3; i++) {
+    const cur = (await call(env, b.cookie, "GET", `/api/duels/${id}/current`)).json();
+    const r = (await call(env, b.cookie, "POST", `/api/duels/${id}/answer`, { gameQuestionId: cur.question.gameQuestionId, choiceIndex: 0 })).json();
+    assert.ok(r.opponentPick, "le choix de A est visible après la réponse de B");
+    assert.equal(r.opponentPick.correct, true);
+    assert.equal(r.scores.opponent, i + 1);
+    if (first) { assert.equal(typeof r.opponentPick.choice, "number"); first = false; }
+  }
 });

@@ -214,6 +214,7 @@ function connectSocket(enabled = true) {
   socket.on("friend:request", (p) => { toast(`${p.from} t'invite à devenir ami`, "good"); refreshSocial(); if (location.hash === "#/friends") rerender(); });
   socket.on("friend:accepted", (p) => { toast(`${p.by} a accepté ton invitation`, "good"); refreshSocial(); if (location.hash === "#/friends") rerender(); });
   socket.on("duel:turn", () => { toast("C'est à toi de jouer dans un duel !", "good"); refresh(); });
+  socket.on("duel:progress", () => { const h = location.hash; if (/^#\/duels(\/[^/]+)?$/.test(h) && !h.endsWith("/new")) rerender(); });
   socket.on("duel:challenged", () => { toast("Tu as reçu un défi !", "good"); refresh(); });
   initLive(socket);
   socket.on("duel:ended", () => { toast("Un duel vient de se terminer", ""); refresh(); });

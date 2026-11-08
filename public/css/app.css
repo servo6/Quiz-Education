@@ -627,3 +627,26 @@ h1, h2, h3, .q-text { font-family: var(--font-display), var(--font-math); }
 .answer.dim.has-opp > :not(.opp-pin) { opacity: .5; }
 @keyframes oppPop { from { transform: translateY(8px) scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .opp-pin { animation: none; } }
+
+/* ── Sélecteur d'émojis ── */
+.emoji-toggle { padding: 0 10px; font-size: 1.3rem; line-height: 1; align-self: flex-end; min-height: 40px; }
+.emoji-panel { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-top: 1px solid var(--line); background: var(--surface); }
+.emoji-panel[hidden] { display: none; }
+.emoji-top { display: flex; gap: 6px; }
+.emoji-top .input { flex: 1; min-width: 0; }
+.emoji-skin { border: 1px solid var(--line); background: transparent; border-radius: 10px; padding: 0 10px; font-size: 1.2rem; cursor: pointer; }
+.emoji-tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.emoji-tabs button { border: 0; background: transparent; font-size: 1.25rem; padding: 4px 8px; border-radius: 8px; cursor: pointer; flex: none; }
+.emoji-tabs button[aria-selected="true"] { background: var(--accent-soft, rgba(127,127,127,.18)); }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 2px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
+.emoji-title, .emoji-empty { grid-column: 1 / -1; font-size: .75rem; color: var(--muted, #888); padding: 4px 2px; }
+.emoji { border: 0; background: transparent; font-size: 1.6rem; line-height: 1; padding: 6px 0; border-radius: 8px; cursor: pointer; font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif; }
+.emoji:hover, .emoji:focus-visible { background: rgba(127,127,127,.2); }
+.bubble.big-emoji { font-size: 2.1rem; line-height: 1.2; background: transparent; border-color: transparent; padding: 2px 6px; color: inherit; }
+
+/* ── Micro du duel en direct ── */
+.voice-btn { position: fixed; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 10000; width: 52px; height: 52px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); background: rgba(20,20,30,.85); color: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.voice-btn[hidden] { display: none; }
+.voice-btn.on { background: #1f9d55; border-color: #7be3a5; animation: micPulse 1.8s ease-in-out infinite; }
+@keyframes micPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(31,157,85,.55); } 50% { box-shadow: 0 0 0 10px rgba(31,157,85,0); } }
+@media (prefers-reduced-motion: reduce) { .voice-btn.on { animation: none; } }

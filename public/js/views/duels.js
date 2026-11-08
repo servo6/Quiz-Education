@@ -21,7 +21,7 @@ export async function duelsView() {
   const row = (d) => h("a.item", { href: `#/duels/${d.id}` },
     initial(d.opponent.username),
     h("div.grow", h("strong", d.opponent.username),
-      h("div.muted.small", d.status === "IN_PROGRESS" ? statusText(d) : resultText(d))),
+      h("div.muted.small", d.status === "IN_PROGRESS" ? `${statusText(d)} · ${liveScore(d)}` : resultText(d))),
     d.status === "IN_PROGRESS"
       ? h("span.chip", { class: d.yourTurn ? "amber" : "" }, d.yourTurn ? "À toi" : `fin dans ${timeLeft(d.deadlineAt)}`)
       : h("span.chip", { class: RESULT[d.result]?.[1] ?? "" }, RESULT[d.result]?.[0] ?? "Terminé"));
@@ -53,6 +53,7 @@ function statusText(d) {
   if (n.action === "play") return `Manche ${n.round} à jouer`;
   return `${d.opponent.username} doit jouer`;
 }
+function liveScore(d) { return `${d.score.you} – ${d.score.opponent ?? d.score.opponentSoFar ?? 0}`; }
 function resultText(d) { return d.score.opponent == null ? "" : `${d.score.you} – ${d.score.opponent}`; }
 
 // ───────── Nouveau duel ─────────
@@ -143,7 +144,7 @@ export async function duelDetailView({ id }) {
     h("section.card.stack",
       h("div.vs",
         h("div", initial(me), h("div", me)),
-        h("div.score", `${duel.score.you} – ${duel.score.opponent ?? "?"}`),
+        h("div.score", `${duel.score.you} – ${duel.score.opponent ?? duel.score.opponentSoFar ?? 0}`),
         h("div", initial(duel.opponent.username), h("div", duel.opponent.username))),
       h("div.center", h("span.chip", `⏳ ${timeLeft(duel.deadlineAt)}`))),
     h("section.card.stack", { class: n.action === "wait" ? "" : "state-play" }, action),
@@ -167,7 +168,7 @@ export async function duelPlayView({ id }, ctx) {
   if (cur.status !== "IN_PROGRESS") { go(`/duels/${id}`); return h("div"); }
   const total = cur.question.total;
   const { el, cleanup } = playStage({
-    total, question: cur.question, label: "Duel", versus: cur.versus,
+    total, question: cur.question, label: "Duel", versus: cur.versus, scores: { ...(cur.scores ?? { you: 0, opponent: 0 }) },
     answer: (gq, idx) => post(`/api/duels/${id}/answer`, { gameQuestionId: gq, choiceIndex: idx }),
     markServed: () => get(`/api/duels/${id}/current`),
     loadNext: async () => { const n = await get(`/api/duels/${id}/current`); return n.status === "IN_PROGRESS" ? n.question : null; },

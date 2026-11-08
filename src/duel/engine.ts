@@ -188,6 +188,12 @@ export class DuelEngine {
     return this.gameByUser.has(userId) || this.challengeByUser.has(userId);
   }
 
+  /** Adversaire dans la partie en direct en cours de `userId` (pour relayer la voix), ou undefined. */
+  opponentIdInGame(userId: string): string | undefined {
+    const game = this.gameOf(userId);
+    return game && game.phase !== "DONE" ? this.opponentOf(game, userId).userId : undefined;
+  }
+
   hasGame(userId: string): boolean {
     return this.gameByUser.has(userId);
   }

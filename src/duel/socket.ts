@@ -7,6 +7,14 @@ import { COOKIE_NAME } from "../auth.ts";
 import { DuelError, type DuelEngine } from "./engine.ts";
 import type { SocketHub } from "./hub.ts";
 
+/** Serveurs STUN (gratuits) et, si configuré, TURN (TURN_URL, TURN_USERNAME, TURN_CREDENTIAL) pour les réseaux qui bloquent le pair-à-pair. */
+function iceServers(): { urls: string | string[]; username?: string; credential?: string }[] {
+  const list: { urls: string | string[]; username?: string; credential?: string }[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }];
+  const url = process.env.TURN_URL;
+  if (url) list.push({ urls: url.split(",").map((u) => u.trim()).filter(Boolean), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
+  return list;
+}
+
 type Ack = (response: unknown) => void;
 
 function errorPayload(e: unknown, log: (e: unknown) => void) {
@@ -77,6 +85,17 @@ export function attachSocketServer(app: FastifyInstance, deps: { prisma: PrismaC
     );
     on("duel:forfeit", z.object({ gameId: z.string().min(1) }), (d) => engine.forfeit(userId, d.gameId));
     on("duel:resume", z.object({}).passthrough(), () => ({ state: engine.snapshot(userId) }));
+
+    // ── Chat vocal du duel en direct : le serveur ne fait que relayer la signalisation WebRTC entre les deux joueurs
+    // (l'audio passe directement de l'un à l'autre). Rien n'est relayé hors d'une partie en cours.
+    const Signal = z.object({ description: z.object({ type: z.enum(["offer", "answer"]), sdp: z.string().max(20000) }).optional(), candidate: z.unknown().optional(), bye: z.boolean().optional() });
+    on("voice:signal", Signal, (d) => {
+      const opp = engine.opponentIdInGame(userId);
+      if (!opp) return;
+      if (d.candidate !== undefined && JSON.stringify(d.candidate).length > 2000) return;
+      hub.emit(opp, "voice:signal", d);
+    });
+    on("voice:config", z.object({}).passthrough(), () => ({ iceServers: iceServers() }));
 
     socket.on("disconnect", () => {
       if (hub.remove(userId, socket.id)) engine.onDisconnect(userId).catch(log);

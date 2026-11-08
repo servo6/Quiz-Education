@@ -1,6 +1,7 @@
 import { h, get, post, api, icon, toast, fail, avatarEl, sheet } from "../lib.js";
 import { S, activeSubject, loadCatalog, lvl, go } from "../state.js";
 
+const onlyEmoji = (t) => { const x = t.trim(); return x.length > 0 && x.length <= 24 && /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u200d\ufe0f\u20e3]|\p{Emoji_Modifier}|\s)+$/u.test(x); };
 const del = (u) => api("DELETE", u);
 const hhmm = (iso) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 const dayLabel = (iso) => {
@@ -12,6 +13,7 @@ const dayLabel = (iso) => {
 const retentionText = (d) => (d === 2 ? "2 jours" : d === 7 ? "1 semaine" : d === 30 ? "1 mois" : `${d} jours`);
 
 // ───────── Amis ─────────
+import { emojiPanel, insertAtCursor } from "../emojiPicker.js";
 export async function friendsView() {
   const sub = activeSubject();
   const [cat, data, pl] = await Promise.all([loadCatalog().catch(() => []), get(`/api/subjects/${sub.id}/friends`), get(`/api/subjects/${sub.id}/players`)]);
@@ -81,7 +83,7 @@ export async function chatView({ id }, ctx) {
     seen.add(m.id);
     const day = dayLabel(m.createdAt);
     if (day !== lastDay) { body.append(h("div.day-sep", day)); lastDay = day; }
-    body.append(h("div.bubble", { class: m.mine ? "mine" : "" }, m.body, h("time", { datetime: m.createdAt }, hhmm(m.createdAt))));
+    body.append(h("div.bubble", { class: (m.mine ? "mine" : "") + (onlyEmoji(m.body) ? " big-emoji" : "") }, m.body, h("time", { datetime: m.createdAt }, hhmm(m.createdAt))));
     lastIso = m.createdAt;
   };
   const toBottom = () => { body.scrollTop = body.scrollHeight; };
@@ -119,6 +121,7 @@ export async function chatView({ id }, ctx) {
       try { await del(`/api/friendships/${id}`); close(); toast("Ami retiré", "good"); go("/friends"); } catch (e) { fail(e); }
     } }, "Retirer des amis")));
 
+  const emo = emojiPanel((ch) => { insertAtCursor(input, ch); });
   const el = h("div.stack",
     h("a.muted", { href: "#/friends" }, "← Amis"),
     h("div.chat",
@@ -126,7 +129,10 @@ export async function chatView({ id }, ctx) {
         h("div.grow", h("strong", first.friend.username), h("div.muted.small", `Messages effacés après ${retentionText(first.retentionDays)}`)),
         h("button.btn.ghost.small", { onclick: menu, "aria-label": "Options" }, "⋯")),
       body,
-      h("form.chat-form", { onsubmit: (e) => { e.preventDefault(); send(); } }, input, h("button.btn.primary", { type: "submit", "aria-label": "Envoyer" }, icon("send")))));
+      emo.el,
+      h("form.chat-form", { onsubmit: (e) => { e.preventDefault(); send(); } },
+        h("button.btn.ghost.emoji-toggle", { type: "button", "aria-label": "Émojis", title: "Émojis", onclick: () => emo.toggle() }, "😊"),
+        input, h("button.btn.primary", { type: "submit", "aria-label": "Envoyer" }, icon("send")))));
   queueMicrotask(toBottom);
   setTimeout(toBottom, 60);
   document.dispatchEvent(new Event("social-changed"));

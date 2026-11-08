@@ -2,6 +2,7 @@
 import { h, mount, toast, confetti, svg, rich, avatarEl } from "./lib.js";
 import { S, refreshSummary, loadMe, lvl, loadCatalog } from "./state.js";
 import { versusBar } from "./stage.js";
+import { initVoice, voiceSync } from "./voice.js";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 const C = 2 * Math.PI * 26;
@@ -26,6 +27,7 @@ function applyState(s) {
 export function initLive(sock) {
   socket = sock;
   if (!layer) { layer = h("div.stage", { id: "live", hidden: true, role: "dialog", "aria-modal": "true", "aria-label": "Duel en direct" }); document.body.append(layer); }
+  initVoice(sock);
   const on = (ev, fn) => socket.on(ev, (p) => { try { fn(p ?? {}); } catch (e) { console.error(e); } });
 
   on("duel:invited", (p) => { invite = p; render(); });
@@ -71,6 +73,7 @@ function frame(...children) {
 const scoreBar = () => versusBar(G.you, G.opponent, { scores: { you: G.scores?.you ?? 0, opponent: G.scores?.opponent ?? 0 } });
 
 function render() {
+  voiceSync(G, S.me?.user?.id);
   stopTick();
   if (!G && !invite && !waiting) { layer.hidden = true; document.body.style.overflow = ""; return; }
   layer.hidden = false; document.body.style.overflow = "hidden";

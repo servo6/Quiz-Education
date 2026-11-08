@@ -90,6 +90,19 @@ const correctIn = (r: FullRound, userId: string) => answersOf(r, userId).filter(
 const totalCorrect = (g: FullGame, userId: string) => g.rounds.reduce((n, r) => n + correctIn(r, userId), 0);
 const totalAnswered = (g: FullGame, userId: string) => g.rounds.reduce((n, r) => n + answersOf(r, userId).filter(Boolean).length, 0);
 
+/**
+ * Score "vu" de l'adversaire : ses bonnes réponses sur les seules questions auxquelles `userId` a déjà répondu.
+ * Rien n'est révélé d'avance, mais le score progresse au fil du match des deux côtés.
+ */
+function seenOpponentScore(g: FullGame, userId: string, oppId: string): number {
+  let n = 0;
+  for (const r of g.rounds) for (const q of r.questions) {
+    if (!q.answers.some((a) => a.userId === userId)) continue;
+    if (q.answers.some((a) => a.userId === oppId && a.isCorrect)) n++;
+  }
+  return n;
+}
+
 type Next =
   | { action: "play"; round: number }
   | { action: "pick"; round: number }
@@ -205,7 +218,7 @@ function summary(game: FullGame, userId: string) {
     questionsPerRound: cfg.questionsPerRound,
     next,
     yourTurn: next.action === "play" || next.action === "pick",
-    score: { you: totalCorrect(game, userId), opponent: game.status === "IN_PROGRESS" ? null : totalCorrect(game, oppId) },
+    score: { you: totalCorrect(game, userId), opponent: game.status === "IN_PROGRESS" ? null : totalCorrect(game, oppId), opponentSoFar: seenOpponentScore(game, userId, oppId) },
     result: me.result,
     createdAt: game.createdAt,
     finishedAt: game.finishedAt,
@@ -557,7 +570,7 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
       const xp = members.find((m) => m.userId === uid)?.xp ?? 0;
       return { id: uid, username: p.user.username, avatar, level: levelFromXp(xp, { base: cfg.levelBase, exponent: cfg.levelExponent }).level };
     };
-    if (current.status === "IN_PROGRESS") return { ...current, versus: { you: card(ctx.user.id), opponent: card(oppId) } };
+    if (current.status === "IN_PROGRESS") return { ...current, versus: { you: card(ctx.user.id), opponent: card(oppId) }, scores: { you: totalCorrect(game, ctx.user.id), opponent: seenOpponentScore(game, ctx.user.id, oppId) } };
     if (current.status === "ROUND_DONE") return { status: "ROUND_DONE", next: nextFor(await loadGame(prisma, ctx.user.id, game.id), cfg, ctx.user.id) };
     return current;
   });
@@ -641,6 +654,11 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
           };
         })()
       : null;
+    const theirs = target.answers.find((a) => a.userId === otherOf(cfg, ctx.user.id));
+    const opponentPick = theirs ? { choice: theirs.choiceIndex == null ? null : toDisplayed(order, theirs.choiceIndex), correct: theirs.isCorrect, timedOut: theirs.choiceIndex == null } : null;
+    const oppIdNow = otherOf(cfg, ctx.user.id);
+    const scores = { you: totalCorrect(finalGame, ctx.user.id), opponent: seenOpponentScore(finalGame, ctx.user.id, oppIdNow) };
+    if (!finished) hub.emit(oppIdNow, "duel:progress", { duelId: game.id });
     const gained = isCorrect ? cfg.xpPerCorrect : 0;
     const lc = { base: cfg.levelBase, exponent: cfg.levelExponent };
     const lvlAfter = levelFromXp(totalXp, lc);
@@ -649,6 +667,8 @@ export function registerDuelAsyncRoutes(app: FastifyInstance, { prisma, auth, ti
       timedOut,
       correctIndex: toDisplayed(order, target.question.answerIndex),
       explanation: target.question.explanation,
+      opponentPick,
+      scores,
       xpGained: gained,
       totalXp,
       level: lvlAfter,

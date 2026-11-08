@@ -61,7 +61,7 @@ export function playStage(opts) {
     // ── En-tête : duel = deux joueurs face à face (chrono au centre) ; solo = ton niveau, ta série et le chrono.
     let hud;
     if (opts.versus) {
-      hud = versusBar(opts.versus.you, opts.versus.opponent, { mid: ring });
+      hud = versusBar(opts.versus.you, opts.versus.opponent, { mid: ring, scores: opts.scores });
     } else {
       const me = { avatar: S.me?.user.avatar, username: S.me?.user.username, level: lvlNow.level };
       const xpFill = h("i", { style: `width:${Math.min(100, (lvlNow.into / Math.max(1, lvlNow.next)) * 100)}%` });
@@ -96,6 +96,10 @@ export function playStage(opts) {
         feedback.replaceChildren(h("button.btn.primary.block", { onclick: resync }, "Continuer"));
         return;
       }
+      if (res.scores && opts.scores) {
+        opts.scores.you = res.scores.you; opts.scores.opponent = res.scores.opponent;
+        hud.querySelectorAll(".pscore").forEach((el, k) => { el.textContent = String(k === 0 ? res.scores.you : res.scores.opponent); el.dataset.score = el.textContent; });
+      }
       pips[pos] = res.correct ? "ok" : "ko";
       pipEls[pos].className = res.correct ? "ok" : "ko";
       if (res.level) { lvlNow.level = lvl(res.level); lvlNow.into = res.level.xpIntoLevel ?? lvlNow.into; lvlNow.next = res.level.xpForNext ?? lvlNow.next; }
@@ -105,6 +109,12 @@ export function playStage(opts) {
         else if (k === i && !res.correct && !res.timedOut) { b.classList.add("wrong"); b.querySelector(".mark").textContent = "✕"; }
         else b.classList.add("dim");
       });
+      // Duel différé : si l'adversaire a déjà répondu, son avatar se pose sur la réponse qu'il a choisie.
+      const op = res.opponentPick;
+      if (op && op.choice != null && buttons[op.choice] && opts.versus) {
+        buttons[op.choice].classList.add("has-opp");
+        buttons[op.choice].append(h("span.opp-pin", avatarEl(opts.versus.opponent.avatar, S.catalog, 30)));
+      }
       const last = !!(res.finished || res.roundDone);
       feedback.replaceChildren(h("div.feedback", { class: res.correct ? "ok" : "ko" },
         h("div.row.between",
