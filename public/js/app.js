@@ -215,8 +215,24 @@ function openSubjects() {
         },
       }, h("div.grow", h("strong", s.name), h("div.muted.small", `Niveau ${s.level} · ${s.title?.name ?? ""}`)),
         s.id === S.me.user.activeSubjectId ? h("span.chip.good", "Active") : null))),
+    S.me.user.tester ? testerSubjects(close) : null,
     h("h3", "Rejoindre une autre matière"),
     joinForm(async () => { close(); await loadMe(); render(); })));
+}
+
+/** Super testeur : toutes les matières de toutes les organisations, sans clés d'accès. */
+function testerSubjects(close) {
+  const box = h("div.stack.tight", h("h3", "Toutes les organisations"));
+  get("/api/tester/subjects").then(({ organizations }) => {
+    box.append(...organizations.filter((o) => o.subjects.length).map((o) => h("div.stack.tight", h("div.muted.small", o.name),
+      h("div.list", o.subjects.map((x) => h("button.item", { onclick: async () => {
+        try {
+          if (!x.joined) await post("/api/tester/join", { subjectId: x.id });
+          await post("/api/me/active-subject", { subjectId: x.id }); await loadMe(); close(); await refreshSummary(); go("/"); render();
+        } catch (e) { fail(e); } } },
+        h("div.grow", h("strong", x.name)), x.joined ? null : h("span.chip", "S'inscrire")))))));
+  }).catch(() => {});
+  return box;
 }
 
 const INVITE_KEY = "qp.invite";

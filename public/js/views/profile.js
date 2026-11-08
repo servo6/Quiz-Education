@@ -9,7 +9,10 @@ import { editAvatar } from "./avatarEditor.js";
 const CATS = { hair: "Cheveux", face: "Visage", outfit: "Tenue", glasses: "Lunettes", hat: "Chapeau", background: "Fond", frame: "Cadre" };
 /** Organisation(s) du joueur, ex. « Université de Yaoundé I ». */
 export function orgLine() {
-  const orgs = S.me.organizations ?? [];
+  const all = S.me.organizations ?? [];
+  // Super testeur : seulement l'organisation de la matière active (il a un profil par organisation)
+  const sub = S.me.user.tester ? activeSubject() : null;
+  const orgs = sub ? all.filter((o) => o.id === sub.organizationId) : all;
   return orgs.length ? h("div.muted.small", `🏛 ${orgs.map((o) => o.name).join(", ")}`) : null;
 }
 const SKINS = ["#f8d9bd", "#f2c9a0", "#d9a273", "#b07a4f", "#8a5a38", "#5e3b24"];

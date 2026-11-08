@@ -10,6 +10,7 @@ import { assertCan } from "../permissions.ts";
 import { fakeVerify, hashPassword, verifyPassword } from "../password.ts";
 import { randomBytes } from "node:crypto";
 import { loadShare, saveShare } from "../accessShare.ts";
+import { isTester, setActiveSubject } from "../tester.ts";
 import { usernameSchema } from "./auth.ts";
 import { emailSchema } from "./email.ts";
 import { sendVerificationMail, staffDeadline, verificationOverdue } from "../emailService.ts";
@@ -187,7 +188,8 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
     const ok = subject ? await verifyPassword(body.accessPassword, subject.accessPasswordHash) : await fakeVerify(body.accessPassword);
     if (!subject || !ok) throw new HttpError(401, "bad_access", "Nom ou mot de passe d'accès incorrect");
 
-    const orgs = await prisma.orgMember.findMany({ where: { userId: ctx.user.id } });
+    const tester = await isTester(prisma, ctx.user.id);
+    const orgs = (await prisma.orgMember.findMany({ where: { userId: ctx.user.id } })).filter((o) => !tester || o.organizationId === subject.organizationId);
     if (orgs.some((o) => o.organizationId !== subject.organizationId)) {
       throw new HttpError(409, "other_organization", "Tu appartiens déjà à une autre organisation. Crée un autre compte pour rejoindre cette matière.");
     }
@@ -212,7 +214,7 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
       const membership = await prisma.membership.findUnique({ where: { userId_subjectId: { userId: ctx.user.id, subjectId } } });
       if (!membership || membership.revokedAt) throw new HttpError(403, "not_a_member", "Tu n'as pas accès à cette matière");
     }
-    await prisma.user.update({ where: { id: ctx.user.id }, data: { activeSubjectId: subjectId } });
+    await setActiveSubject(prisma, ctx.user, subjectId);
     return { activeSubjectId: subjectId };
   });
 
@@ -290,8 +292,9 @@ export function registerSubjectRoutes(app: FastifyInstance, deps: Deps): void {
         orgMemberships: { where: { revokedAt: null }, select: { organization: { select: { name: true } } } }, adminOrgs: { select: { organization: { select: { name: true } } } } },
     });
     const page = rows.slice(0, q.limit);
+    const testerIds = new Set((await prisma.setting.findMany({ where: { key: { in: page.map((u) => `tester:${u.id}`) } }, select: { key: true } })).map((r) => r.key.slice("tester:".length)));
     return {
-      users: page.map(({ _count, bannedAt, deactivatedAt, emailVerifiedAt, orgMemberships, adminOrgs, ...u }) => ({ ...u, username: originalUsername(u.username), email: originalEmail(u.email), avatar: parseAvatar(u.avatar), organizations: [...new Set([...adminOrgs, ...orgMemberships].map((o) => o.organization.name))].sort((a, b) => a.localeCompare(b)), deactivated: !!deactivatedAt, emailVerified: !!emailVerifiedAt, overdue: verificationOverdue({ role: u.role, emailVerifiedAt, verifyDeadline: u.verifyDeadline }), banned: !!bannedAt, subjectCount: _count.memberships })),
+      users: page.map(({ _count, bannedAt, deactivatedAt, emailVerifiedAt, orgMemberships, adminOrgs, ...u }) => ({ ...u, username: originalUsername(u.username), email: originalEmail(u.email), avatar: parseAvatar(u.avatar), organizations: [...new Set([...adminOrgs, ...orgMemberships].map((o) => o.organization.name))].sort((a, b) => a.localeCompare(b)), deactivated: !!deactivatedAt, emailVerified: !!emailVerifiedAt, overdue: verificationOverdue({ role: u.role, emailVerifiedAt, verifyDeadline: u.verifyDeadline }), banned: !!bannedAt, subjectCount: _count.memberships, tester: testerIds.has(u.id) })),
       nextCursor: rows.length > q.limit ? page[page.length - 1].id : null,
     };
   });

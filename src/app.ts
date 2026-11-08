@@ -27,6 +27,8 @@ import { registerLibraryRoutes } from "./routes/library.ts";
 import { registerMemberRoutes } from "./routes/members.ts";
 import { registerProgressRoutes } from "./routes/progress.ts";
 import { registerOrganizationRoutes } from "./routes/organizations.ts";
+import { registerTesterRoutes } from "./routes/testers.ts";
+import { registerTransferRoutes } from "./routes/subjectTransfer.ts";
 import { registerSoloRoutes } from "./routes/solo.ts";
 import { registerHistoryRoutes } from "./routes/history.ts";
 import { registerSocialRoutes } from "./routes/social.ts";
@@ -123,6 +125,8 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   registerAuthRoutes(app, deps, opts.secureCookies ?? false);
   registerEmailRoutes(app, deps);
   registerOrganizationRoutes(app, deps);
+  registerTesterRoutes(app, deps);
+  registerTransferRoutes(app, deps);
   registerSubjectRoutes(app, deps);
   registerThemeRoutes(app, deps);
   registerScopedThemeRoutes(app, deps);

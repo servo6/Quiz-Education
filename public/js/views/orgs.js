@@ -96,11 +96,35 @@ export async function matieres(loadAdminSubjects, chooseAdminSub) {
       accountForm("Créer le compte", async (username, password, email) => { await post(`/api/subjects/${s.id}/managers`, { username, email, password }); toast("Responsable créé", "good"); load(); }));
   });
 
+  /** Déplacer ou copier la matière vers une autre organisation (super administrateur). */
+  const transferSheet = (s, kind) => sheet(`${kind === "move" ? "Déplacer" : "Copier"} « ${s.name} »`, (close) => {
+    const dest = h("select.input", { id: "tr-o", "aria-label": "Organisation de destination" }, organizations.filter((o) => kind === "copy" || o.id !== s.organizationId).map((o) => h("option", { value: o.id }, o.name)));
+    const nm = h("input.input", { id: "tr-n", maxlength: 60, value: s.name, "aria-label": "Nom de la matière" });
+    return h("form.stack", { onsubmit: async (e) => { e.preventDefault();
+      const body = { organizationId: dest.value }; if (nm.value.trim() && nm.value.trim() !== s.name) body.name = nm.value.trim();
+      try {
+        let r;
+        if (kind === "copy") r = await post(`/api/subjects/${s.id}/copy`, body);
+        else {
+          try { r = await post(`/api/subjects/${s.id}/move`, body); }
+          catch (ex) { if (ex.code !== "players_conflict" || !confirm(ex.message + " Continuer ?")) throw ex; r = await post(`/api/subjects/${s.id}/move`, { ...body, force: true }); }
+        }
+        toast(kind === "copy" ? `Matière copiée (${r.questions} questions)` : "Matière déplacée", "good");
+        close(); await loadAdminSubjects(true); rerender();
+      } catch (ex) { if (ex.code !== "players_conflict") fail(ex); } } },
+      h("div.field", h("label", { for: "tr-o" }, "Organisation de destination"), dest),
+      h("div.field", h("label", { for: "tr-n" }, "Nom dans l'organisation de destination"), nm),
+      h("p.muted.small", kind === "copy" ? "Copie les chapitres, les questions, les réglages et les titres. Les joueurs, les classements et les responsables ne sont pas copiés." : "Les joueurs qui ne suivent que cette matière la suivent dans la nouvelle organisation."),
+      h("button.btn.primary.block", { type: "submit" }, kind === "copy" ? "Copier" : "Déplacer"));
+  });
+
   const row = (s) => h("div.item", { style: "flex-wrap:wrap" },
     h("div.grow", h("strong", s.name), h("div.muted.small", `${s.memberCount} joueur${s.memberCount > 1 ? "s" : ""} · ${s.managers.length ? "responsable : " + s.managers.map((m) => m.username).join(", ") : "aucun responsable"}`)),
     h("div.row.wrap",
       h("button.btn.small", { onclick: () => { chooseAdminSub(s.id); go("/admin/questions"); } }, "Gérer"),
       h("button.btn.small", { onclick: () => managersSheet(s) }, "Responsables"),
+      isRoot() && organizations.length > 1 ? h("button.btn.small", { onclick: () => transferSheet(s, "move") }, "Déplacer") : null,
+      isRoot() && organizations.length > 0 ? h("button.btn.small", { onclick: () => transferSheet(s, "copy") }, "Copier") : null,
       h("button.btn.small", { onclick: async () => { const n = prompt("Nouveau nom de la matière", s.name); if (!n?.trim() || n.trim() === s.name) return;
         try { await patch(`/api/subjects/${s.id}`, { name: n.trim() }); toast("Matière renommée", "good"); await loadAdminSubjects(true); rerender(); } catch (e) { fail(e); } } }, "Renommer"),
       h("button.btn.small.danger", { onclick: async () => {

@@ -90,6 +90,7 @@ export async function comptes() {
       h("span.dav", avatarEl(u.avatar ?? null, S.catalog, 40)),
       h("div.grow", h("strong", u.username, me ? " (toi)" : ""), h("div.muted.small", `${u.email ? u.email + " · " : ""}${u.subjectCount} matière${u.subjectCount > 1 ? "s" : ""} · inscrit le ${fmt(u.createdAt)}`),
         u.organizations?.length ? h("div.muted.small", `Organisation${u.organizations.length > 1 ? "s" : ""} : ${u.organizations.join(", ")}`) : null),
+      u.tester ? h("span.chip.good", "super testeur") : null,
       u.role !== "USER" ? h("span.chip.amber", u.role === "ADMIN" ? "super admin" : u.role === "ORG_ADMIN" ? "admin d'organisation" : "responsable") : null,
       u.deactivated ? h("span.chip.amber", "désactivé par l'utilisateur") : u.banned ? h("span.chip.bad", "suspendu") : null,
       u.overdue ? h("span.chip.bad", "vérification dépassée") : null,
@@ -109,7 +110,27 @@ export async function comptes() {
         stat("Chapitres", ov.chapters), stat("Questions", ov.questions), stat("Réponses données", ov.answers), stat("Parties aujourd'hui", ov.gamesToday))),
     h("section.card.stack", h("h2", "Sauvegarde"),
       h("button.btn", { onclick: async () => { try { const d = await get("/api/admin/export"); download(`sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, d); toast("Sauvegarde téléchargée", "good"); } catch (e) { fail(e); } } }, "Télécharger la sauvegarde")),
+    S.me.user.role === "ADMIN" ? testersSection(() => load().catch(fail)) : null,
     h("section.stack.tight", h("h2", "Comptes"), q, filter, list, more));
+}
+
+/** Super testeurs : comptes joueurs inscrits dans toutes les organisations, avec un profil par organisation. */
+function testersSection(reload) {
+  const list = h("div.list");
+  const u = h("input.input", { required: true, minlength: 3, maxlength: 32, autocapitalize: "none", spellcheck: "false", "aria-label": "Pseudo" });
+  const p = h("input.input", { type: "password", required: true, minlength: 8, autocomplete: "new-password", "aria-label": "Mot de passe" });
+  async function paint() {
+    const { testers } = await get("/api/testers");
+    list.replaceChildren(...(testers.length ? testers.map((t) => h("div.item", h("div.grow", h("strong", t.username), h("div.muted.small", t.organizations.length ? t.organizations.join(", ") : "Aucune organisation")), t.banned ? h("span.chip.bad", "suspendu") : null)) : [h("p.muted", "Aucun super testeur.")]));
+  }
+  paint().catch(() => {});
+  return h("section.card.stack", h("h2", "Super testeurs"),
+    h("p.muted.small", "Un super testeur s'inscrit dans toutes les matières de toutes les organisations, avec un avatar différent dans chaque organisation."),
+    list,
+    h("form.stack.tight", { onsubmit: async (e) => { e.preventDefault();
+      try { await post("/api/testers", { username: u.value.trim(), password: p.value }); u.value = ""; p.value = ""; toast("Super testeur créé", "good"); await paint(); reload(); } catch (ex) { fail(ex); } } },
+      h("div.field", h("label", "Pseudo"), u), h("div.field", h("label", "Mot de passe"), p),
+      h("button.btn.primary", { type: "submit" }, "Créer un super testeur")));
 }
 
 // ───────── Titres ─────────

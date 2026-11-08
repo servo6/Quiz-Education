@@ -138,7 +138,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
     for (const m of memberships) tiersBySubject.set(m.subject.id, (await loadTiers(prisma, m.subject.id)).tiers);
 
     return {
-      user: { id: user.id, username: user.username, email: user.email, emailVerified: !!user.emailVerifiedAt, verifyDeadline: user.emailVerifiedAt ? null : user.verifyDeadline, role: user.role, activeSubjectId: user.activeSubjectId, avatar: parseAvatar(user.avatar) },
+      user: { id: user.id, username: user.username, email: user.email, emailVerified: !!user.emailVerifiedAt, verifyDeadline: user.emailVerifiedAt ? null : user.verifyDeadline, role: user.role, activeSubjectId: user.activeSubjectId, avatar: parseAvatar(user.avatar), tester: globalRows.some((r) => r.key === `tester:${user.id}`) },
       themeDefault: await defaultTheme(prisma, user, actor),
       managedSubjectIds: [],
       adminOrgIds: [],
@@ -147,7 +147,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: Deps, secure: boo
         const s = mergeSettings({ ...globalSettings, ...orgSettings.get(m.subject.organizationId) }, parseStoredSettings(m.subject.settings));
         const lvl = levelFromXp(m.xp, { base: s.levelBase ?? DEFAULT_SETTINGS.levelBase, exponent: s.levelExponent });
         const t = titleFor(lvl.level, tiersBySubject.get(m.subject.id) ?? []);
-        return { id: m.subject.id, name: m.subject.name, xp: m.xp, ...lvl, title: { name: t.name, color: t.color } };
+        return { id: m.subject.id, name: m.subject.name, organizationId: m.subject.organizationId, xp: m.xp, ...lvl, title: { name: t.name, color: t.color } };
       }),
     };
   });
